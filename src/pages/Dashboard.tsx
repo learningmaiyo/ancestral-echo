@@ -3,10 +3,45 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Mic, MessageCircle, BookOpen, TreePine, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  
+  const [stats, setStats] = useState({
+    familyMembers: 0,
+    recordings: 0,
+    stories: 0,
+    personas: 0
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (!user) return;
+
+      try {
+        const [familyMembersResponse, recordingsResponse, storiesResponse, personasResponse] = await Promise.all([
+          supabase.from('family_members').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          supabase.from('recordings').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          supabase.from('stories').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          supabase.from('personas').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
+        ]);
+
+        setStats({
+          familyMembers: familyMembersResponse.count || 0,
+          recordings: recordingsResponse.count || 0,
+          stories: storiesResponse.count || 0,
+          personas: personasResponse.count || 0
+        });
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      }
+    };
+
+    fetchStats();
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
@@ -155,19 +190,19 @@ const Dashboard = () => {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                 <div>
-                  <div className="text-2xl font-bold text-primary">0</div>
+                  <div className="text-2xl font-bold text-primary">{stats.familyMembers}</div>
                   <div className="text-sm text-muted-foreground">Family Members</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-primary">0</div>
+                  <div className="text-2xl font-bold text-primary">{stats.recordings}</div>
                   <div className="text-sm text-muted-foreground">Recordings</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-primary">0</div>
+                  <div className="text-2xl font-bold text-primary">{stats.stories}</div>
                   <div className="text-sm text-muted-foreground">Stories</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-primary">0</div>
+                  <div className="text-2xl font-bold text-primary">{stats.personas}</div>
                   <div className="text-sm text-muted-foreground">Personas</div>
                 </div>
               </div>
