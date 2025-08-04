@@ -4,9 +4,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Send, User, Loader2, Heart } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Send, User, Loader2, Heart, MessageCircle, Mic } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import VoiceInterface from '@/components/VoiceInterface';
 
 interface Message {
   id: string;
@@ -178,6 +180,19 @@ const Chat = () => {
     }
   };
 
+  const handleVoiceMessage = (event: any) => {
+    // Handle voice events and convert them to text messages for display
+    if (event.type === 'response.audio_transcript.done') {
+      const aiMessage: Message = {
+        id: 'voice-' + Date.now(),
+        content: event.transcript || 'Voice response',
+        is_user_message: false,
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, aiMessage]);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -261,89 +276,117 @@ const Chat = () => {
         </div>
       </header>
 
-      {/* Messages */}
+      {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-6 flex flex-col">
-        <div className="flex-1 space-y-4 mb-6 max-w-4xl mx-auto w-full">
-          {messages.length === 0 ? (
-            <Card className="p-8 text-center">
-              <CardContent>
-                <Heart className="h-12 w-12 text-primary mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">
-                  Start a conversation with {conversation.personas.family_members.name}
-                </h3>
-                <p className="text-muted-foreground">
-                  Ask about their memories, get advice, or just have a chat. They're here to connect with you.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.is_user_message ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                    message.is_user_message
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
-                  }`}
-                >
-                  <p className="text-sm">{message.content}</p>
-                  <p className={`text-xs mt-2 ${
-                    message.is_user_message 
-                      ? 'text-primary-foreground/70' 
-                      : 'text-muted-foreground'
-                  }`}>
-                    {formatTime(message.created_at)}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-          
-          {sending && (
-            <div className="flex justify-start">
-              <div className="bg-muted rounded-lg px-4 py-3 flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">
-                  {conversation.personas.family_members.name} is typing...
-                </span>
-              </div>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
-        </div>
+        <Tabs defaultValue="text" className="flex-1 flex flex-col">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-6">
+            <TabsTrigger value="text" className="gap-2">
+              <MessageCircle className="h-4 w-4" />
+              Text Chat
+            </TabsTrigger>
+            <TabsTrigger value="voice" className="gap-2">
+              <Mic className="h-4 w-4" />
+              Voice Chat
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Message Input */}
-        <div className="max-w-4xl mx-auto w-full">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex gap-2">
-                <Input
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder={`Message ${conversation.personas.family_members.name}...`}
-                  disabled={sending}
-                  className="flex-1"
-                />
-                <Button 
-                  onClick={sendMessage} 
-                  disabled={!newMessage.trim() || sending}
-                  size="sm"
-                >
-                  {sending ? (
+          {/* Text Chat Tab */}
+          <TabsContent value="text" className="flex-1 flex flex-col space-y-6">
+            {/* Messages */}
+            <div className="flex-1 space-y-4 max-w-4xl mx-auto w-full">
+              {messages.length === 0 ? (
+                <Card className="p-8 text-center">
+                  <CardContent>
+                    <Heart className="h-12 w-12 text-primary mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">
+                      Start a conversation with {conversation.personas.family_members.name}
+                    </h3>
+                    <p className="text-muted-foreground">
+                      Ask about their memories, get advice, or just have a chat. They're here to connect with you.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.is_user_message ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[70%] rounded-lg px-4 py-3 ${
+                        message.is_user_message
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted'
+                      }`}
+                    >
+                      <p className="text-sm">{message.content}</p>
+                      <p className={`text-xs mt-2 ${
+                        message.is_user_message 
+                          ? 'text-primary-foreground/70' 
+                          : 'text-muted-foreground'
+                      }`}>
+                        {formatTime(message.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+              
+              {sending && (
+                <div className="flex justify-start">
+                  <div className="bg-muted rounded-lg px-4 py-3 flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                    <span className="text-sm text-muted-foreground">
+                      {conversation.personas.family_members.name} is typing...
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Message Input */}
+            <div className="max-w-4xl mx-auto w-full">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex gap-2">
+                    <Input
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder={`Message ${conversation.personas.family_members.name}...`}
+                      disabled={sending}
+                      className="flex-1"
+                    />
+                    <Button 
+                      onClick={sendMessage} 
+                      disabled={!newMessage.trim() || sending}
+                      size="sm"
+                    >
+                      {sending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Voice Chat Tab */}
+          <TabsContent value="voice" className="flex-1 flex flex-col items-center justify-center">
+            <div className="max-w-md w-full">
+              <VoiceInterface
+                conversationId={conversationId!}
+                familyMemberName={conversation.personas.family_members.name}
+                onMessage={handleVoiceMessage}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
