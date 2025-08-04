@@ -14,7 +14,302 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      conversation_messages: {
+        Row: {
+          audio_url: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          is_user_message: boolean
+          referenced_stories: string[] | null
+        }
+        Insert: {
+          audio_url?: string | null
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          is_user_message: boolean
+          referenced_stories?: string[] | null
+        }
+        Update: {
+          audio_url?: string | null
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          is_user_message?: boolean
+          referenced_stories?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string
+          persona_id: string
+          started_at: string
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          persona_id: string
+          started_at?: string
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          persona_id?: string
+          started_at?: string
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      family_members: {
+        Row: {
+          bio: string | null
+          birth_date: string | null
+          created_at: string
+          id: string
+          name: string
+          photo_url: string | null
+          relationship: Database["public"]["Enums"]["relationship_type"] | null
+          updated_at: string
+          user_id: string
+          voice_settings: Json | null
+        }
+        Insert: {
+          bio?: string | null
+          birth_date?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          photo_url?: string | null
+          relationship?: Database["public"]["Enums"]["relationship_type"] | null
+          updated_at?: string
+          user_id: string
+          voice_settings?: Json | null
+        }
+        Update: {
+          bio?: string | null
+          birth_date?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          photo_url?: string | null
+          relationship?: Database["public"]["Enums"]["relationship_type"] | null
+          updated_at?: string
+          user_id?: string
+          voice_settings?: Json | null
+        }
+        Relationships: []
+      }
+      personas: {
+        Row: {
+          conversation_style: Json | null
+          created_at: string
+          family_member_id: string
+          id: string
+          is_active: boolean | null
+          knowledge_base: string | null
+          personality_traits: Json | null
+          training_status:
+            | Database["public"]["Enums"]["processing_status"]
+            | null
+          updated_at: string
+          user_id: string
+          voice_model_id: string | null
+        }
+        Insert: {
+          conversation_style?: Json | null
+          created_at?: string
+          family_member_id: string
+          id?: string
+          is_active?: boolean | null
+          knowledge_base?: string | null
+          personality_traits?: Json | null
+          training_status?:
+            | Database["public"]["Enums"]["processing_status"]
+            | null
+          updated_at?: string
+          user_id: string
+          voice_model_id?: string | null
+        }
+        Update: {
+          conversation_style?: Json | null
+          created_at?: string
+          family_member_id?: string
+          id?: string
+          is_active?: boolean | null
+          knowledge_base?: string | null
+          personality_traits?: Json | null
+          training_status?:
+            | Database["public"]["Enums"]["processing_status"]
+            | null
+          updated_at?: string
+          user_id?: string
+          voice_model_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personas_family_member_id_fkey"
+            columns: ["family_member_id"]
+            isOneToOne: false
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recordings: {
+        Row: {
+          audio_url: string
+          context: string | null
+          created_at: string
+          duration_seconds: number | null
+          family_member_id: string
+          file_size_bytes: number | null
+          id: string
+          processing_status:
+            | Database["public"]["Enums"]["processing_status"]
+            | null
+          session_date: string
+          transcription: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audio_url: string
+          context?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          family_member_id: string
+          file_size_bytes?: number | null
+          id?: string
+          processing_status?:
+            | Database["public"]["Enums"]["processing_status"]
+            | null
+          session_date?: string
+          transcription?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audio_url?: string
+          context?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          family_member_id?: string
+          file_size_bytes?: number | null
+          id?: string
+          processing_status?:
+            | Database["public"]["Enums"]["processing_status"]
+            | null
+          session_date?: string
+          transcription?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recordings_family_member_id_fkey"
+            columns: ["family_member_id"]
+            isOneToOne: false
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stories: {
+        Row: {
+          category: Database["public"]["Enums"]["story_category"] | null
+          content: string
+          created_at: string
+          emotional_tone: string | null
+          end_timestamp: number | null
+          family_member_id: string
+          id: string
+          keywords: string[] | null
+          recording_id: string
+          start_timestamp: number | null
+          themes: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["story_category"] | null
+          content: string
+          created_at?: string
+          emotional_tone?: string | null
+          end_timestamp?: number | null
+          family_member_id: string
+          id?: string
+          keywords?: string[] | null
+          recording_id: string
+          start_timestamp?: number | null
+          themes?: string[] | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["story_category"] | null
+          content?: string
+          created_at?: string
+          emotional_tone?: string | null
+          end_timestamp?: number | null
+          family_member_id?: string
+          id?: string
+          keywords?: string[] | null
+          recording_id?: string
+          start_timestamp?: number | null
+          themes?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stories_family_member_id_fkey"
+            columns: ["family_member_id"]
+            isOneToOne: false
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stories_recording_id_fkey"
+            columns: ["recording_id"]
+            isOneToOne: false
+            referencedRelation: "recordings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +318,29 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      processing_status: "pending" | "processing" | "completed" | "failed"
+      relationship_type:
+        | "parent"
+        | "grandparent"
+        | "sibling"
+        | "aunt_uncle"
+        | "cousin"
+        | "child"
+        | "grandchild"
+        | "spouse"
+        | "friend"
+        | "other"
+      story_category:
+        | "childhood"
+        | "career"
+        | "family"
+        | "wisdom"
+        | "historical"
+        | "hobbies"
+        | "travel"
+        | "achievements"
+        | "challenges"
+        | "relationships"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +467,32 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      processing_status: ["pending", "processing", "completed", "failed"],
+      relationship_type: [
+        "parent",
+        "grandparent",
+        "sibling",
+        "aunt_uncle",
+        "cousin",
+        "child",
+        "grandchild",
+        "spouse",
+        "friend",
+        "other",
+      ],
+      story_category: [
+        "childhood",
+        "career",
+        "family",
+        "wisdom",
+        "historical",
+        "hobbies",
+        "travel",
+        "achievements",
+        "challenges",
+        "relationships",
+      ],
+    },
   },
 } as const
