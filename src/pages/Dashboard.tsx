@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Mic, MessageCircle, Settings } from 'lucide-react';
+import { Users, Mic, MessageCircle, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
@@ -32,7 +32,7 @@ const Dashboard = () => {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -40,7 +40,7 @@ const Dashboard = () => {
                 Family Members
               </CardTitle>
               <CardDescription>
-                Add and manage your family members' profiles
+                Manage your family members and their information
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -48,7 +48,7 @@ const Dashboard = () => {
                 className="w-full"
                 onClick={() => navigate('/family-members')}
               >
-                Add Family Member
+                View Family Members
               </Button>
             </CardContent>
           </Card>
@@ -56,16 +56,17 @@ const Dashboard = () => {
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Mic className="h-5 w-5 text-primary" />
+                <Mic className="h-5 w-5 text-destructive" />
                 Record Stories
               </CardTitle>
               <CardDescription>
-                Capture family memories and create recordings
+                Capture and preserve family stories and memories
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Button 
-                className="w-full"
+                className="w-full" 
+                variant="destructive"
                 onClick={() => navigate('/record')}
               >
                 Start Recording
@@ -76,16 +77,20 @@ const Dashboard = () => {
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <MessageCircle className="h-5 w-5 text-primary" />
-                Conversations
+                <BookOpen className="h-5 w-5 text-accent" />
+                Stories
               </CardTitle>
               <CardDescription>
-                Chat with your family's digital personas
+                Browse and search through preserved family stories
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full">
-                Start Conversation
+              <Button 
+                className="w-full" 
+                variant="outline"
+                onClick={() => navigate('/stories')}
+              >
+                View Stories
               </Button>
             </CardContent>
           </Card>
@@ -93,16 +98,20 @@ const Dashboard = () => {
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5 text-primary" />
-                Settings
+                <MessageCircle className="h-5 w-5 text-secondary" />
+                AI Conversations
               </CardTitle>
               <CardDescription>
-                Manage your account and preferences
+                Chat with AI personas of your family members
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full">
-                Open Settings
+              <Button 
+                className="w-full" 
+                variant="secondary"
+                onClick={() => navigate('/conversations')}
+              >
+                Start Conversation
               </Button>
             </CardContent>
           </Card>

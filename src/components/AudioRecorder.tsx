@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -18,18 +17,44 @@ interface FamilyMember {
 }
 
 interface AudioRecorderProps {
-  familyMembers: FamilyMember[];
-  onRecordingSaved?: () => void;
+  preselectedFamilyMember?: string | null;
 }
 
-export const AudioRecorder = ({ familyMembers, onRecordingSaved }: AudioRecorderProps) => {
+export const AudioRecorder = ({ preselectedFamilyMember }: AudioRecorderProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const recorder = useAudioRecorder();
-  const [selectedMember, setSelectedMember] = useState('');
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [selectedMember, setSelectedMember] = useState(preselectedFamilyMember || '');
   const [context, setContext] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Fetch family members
+  useEffect(() => {
+    const fetchFamilyMembers = async () => {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('family_members')
+          .select('id, name')
+          .eq('user_id', user.id)
+          .order('name');
+
+        if (error) {
+          console.error('Error fetching family members:', error);
+          return;
+        }
+
+        setFamilyMembers(data || []);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchFamilyMembers();
+  }, [user]);
 
   const handleStartRecording = async () => {
     try {
@@ -83,9 +108,8 @@ export const AudioRecorder = ({ familyMembers, onRecordingSaved }: AudioRecorder
 
       // Reset form
       recorder.resetRecording();
-      setSelectedMember('');
+      setSelectedMember(preselectedFamilyMember || '');
       setContext('');
-      onRecordingSaved?.();
 
     } catch (error: any) {
       console.error('Error saving recording:', error);
@@ -117,22 +141,28 @@ export const AudioRecorder = ({ familyMembers, onRecordingSaved }: AudioRecorder
         {/* Family Member Selection */}
         <div className="space-y-2">
           <Label>Family Member *</Label>
-          <Select
-            value={selectedMember}
-            onValueChange={setSelectedMember}
-            disabled={recorder.isRecording}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select family member" />
-            </SelectTrigger>
-            <SelectContent>
-              {familyMembers.map((member) => (
-                <SelectItem key={member.id} value={member.id}>
-                  {member.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {familyMembers.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              No family members found. <a href="/family-members" className="text-primary hover:underline">Add family members first</a>.
+            </div>
+          ) : (
+            <Select
+              value={selectedMember}
+              onValueChange={setSelectedMember}
+              disabled={recorder.isRecording}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select family member" />
+              </SelectTrigger>
+              <SelectContent>
+                {familyMembers.map((member) => (
+                  <SelectItem key={member.id} value={member.id}>
+                    {member.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Context */}

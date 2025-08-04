@@ -209,7 +209,11 @@ export const FamilyMembersList = () => {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => window.location.href = `/record?familyMember=${member.id}`}
+                    >
                       <Mic className="h-4 w-4 mr-1" />
                       Record
                     </Button>

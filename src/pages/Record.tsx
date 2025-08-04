@@ -14,6 +14,8 @@ interface FamilyMember {
 const Record = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const urlParams = new URLSearchParams(window.location.search);
+  const preselectedFamilyMember = urlParams.get('familyMember');
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -94,7 +96,7 @@ const Record = () => {
               </Button>
             </div>
           ) : (
-            <AudioRecorder familyMembers={familyMembers} />
+            <AudioRecorder preselectedFamilyMember={preselectedFamilyMember} />
           )}
         </div>
       </main>
