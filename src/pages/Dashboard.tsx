@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Mic, MessageCircle, BookOpen, TreePine } from 'lucide-react';
+import { Users, Mic, MessageCircle, BookOpen, TreePine, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
@@ -84,13 +84,23 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                className="w-full" 
-                variant="destructive"
-                onClick={() => navigate('/record')}
-              >
-                Start Recording
-              </Button>
+              <div className="space-y-2">
+                <Button 
+                  className="w-full" 
+                  variant="destructive"
+                  onClick={() => navigate('/record')}
+                >
+                  Desktop Recording
+                </Button>
+                <Button 
+                  className="w-full gap-2" 
+                  variant="outline"
+                  onClick={() => navigate('/mobile-record')}
+                >
+                  <Smartphone className="h-4 w-4" />
+                  Mobile Recording
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

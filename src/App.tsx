@@ -13,6 +13,7 @@ import Stories from "./pages/Stories";
 import Conversations from "./pages/Conversations";
 import Chat from "./pages/Chat";
 import FamilyTree from "./pages/FamilyTree";
+import MobileRecord from "./pages/MobileRecord";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
          <Route path="/conversations" element={<Conversations />} />
          <Route path="/chat/:conversationId" element={<Chat />} />
          <Route path="/family-tree" element={<FamilyTree />} />
+         <Route path="/mobile-record" element={<MobileRecord />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

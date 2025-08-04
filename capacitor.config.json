@@ -1,0 +1,14 @@
+{
+  "appId": "app.lovable.d6da4dc15fd1407f8ebf00463b9e5409",
+  "appName": "ancestral-echo",
+  "webDir": "dist",
+  "server": {
+    "url": "https://d6da4dc1-5fd1-407f-8ebf-00463b9e5409.lovableproject.com?forceHideBadge=true",
+    "cleartext": true
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}
