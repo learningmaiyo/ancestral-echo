@@ -64,7 +64,10 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full">
+              <Button 
+                className="w-full"
+                onClick={() => navigate('/record')}
+              >
                 Start Recording
               </Button>
             </CardContent>
