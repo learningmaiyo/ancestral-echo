@@ -1,9 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Mic, Users, Menu } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-heritage-soft shadow-soft">
@@ -35,10 +37,10 @@ export const Header = () => {
 
           {/* Desktop Buttons */}
           <div className="hidden md:flex items-center gap-4">
-            <Button variant="ghost">
+            <Button variant="ghost" onClick={() => navigate('/auth')}>
               Sign In
             </Button>
-            <Button variant="heritage">
+            <Button variant="heritage" onClick={() => navigate('/auth')}>
               <Mic className="w-4 h-4 mr-2" />
               Start Recording
             </Button>
@@ -72,10 +74,10 @@ export const Header = () => {
                 About
               </a>
               <div className="pt-4 space-y-2">
-                <Button variant="ghost" className="w-full justify-start">
+                <Button variant="ghost" className="w-full justify-start" onClick={() => navigate('/auth')}>
                   Sign In
                 </Button>
-                <Button variant="heritage" className="w-full justify-start">
+                <Button variant="heritage" className="w-full justify-start" onClick={() => navigate('/auth')}>
                   <Mic className="w-4 h-4 mr-2" />
                   Start Recording
                 </Button>
