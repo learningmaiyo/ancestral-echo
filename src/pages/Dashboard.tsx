@@ -182,7 +182,30 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        <div className="mt-12">
+        <div className="mt-8">
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mic className="h-5 w-5 text-accent" />
+                API Testing
+              </CardTitle>
+              <CardDescription>
+                Test your OpenAI and ElevenLabs API connections
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button 
+                className="w-full" 
+                variant="outline"
+                onClick={() => navigate('/api-tests')}
+              >
+                Run API Tests
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="mt-8">
           <Card>
             <CardHeader>
               <CardTitle>Quick Stats</CardTitle>

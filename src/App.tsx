@@ -14,6 +14,7 @@ import Conversations from "./pages/Conversations";
 import Chat from "./pages/Chat";
 import FamilyTree from "./pages/FamilyTree";
 import MobileRecord from "./pages/MobileRecord";
+import APITests from "./pages/APITests";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
          <Route path="/chat/:conversationId" element={<Chat />} />
          <Route path="/family-tree" element={<FamilyTree />} />
          <Route path="/mobile-record" element={<MobileRecord />} />
+         <Route path="/api-tests" element={<APITests />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
