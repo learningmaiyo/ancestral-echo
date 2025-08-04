@@ -87,7 +87,7 @@ export const AudioRecorder = ({ preselectedFamilyMember }: AudioRecorderProps) =
         .getPublicUrl(fileName);
 
       // Save recording metadata
-      const { error: insertError } = await supabase
+      const { data: insertData, error: insertError } = await supabase
         .from('recordings')
         .insert({
           user_id: user.id,
@@ -97,14 +97,26 @@ export const AudioRecorder = ({ preselectedFamilyMember }: AudioRecorderProps) =
           context: context || null,
           file_size_bytes: recorder.audioBlob.size,
           processing_status: 'pending',
-        });
+        })
+        .select()
+        .single();
 
       if (insertError) throw insertError;
 
       toast({
         title: 'Recording saved!',
-        description: 'Your recording has been saved successfully.',
+        description: 'Your recording has been saved and will be processed shortly.',
       });
+
+      // Trigger background processing
+      try {
+        await supabase.functions.invoke('process-recording', {
+          body: { recordingId: insertData.id }
+        });
+      } catch (processError) {
+        console.error('Error triggering processing:', processError);
+        // Don't show error to user as the recording was saved successfully
+      }
 
       // Reset form
       recorder.resetRecording();

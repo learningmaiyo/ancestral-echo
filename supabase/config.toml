@@ -1,1 +1,7 @@
 project_id = "voypgvppnnmacbjboovn"
+
+[functions.process-recording]
+verify_jwt = false
+
+[functions.chat-with-persona]
+verify_jwt = false

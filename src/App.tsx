@@ -11,6 +11,7 @@ import FamilyMembers from "./pages/FamilyMembers";
 import Record from "./pages/Record";
 import Stories from "./pages/Stories";
 import Conversations from "./pages/Conversations";
+import Chat from "./pages/Chat";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
         <Route path="/record" element={<Record />} />
         <Route path="/stories" element={<Stories />} />
         <Route path="/conversations" element={<Conversations />} />
+        <Route path="/chat/:conversationId" element={<Chat />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

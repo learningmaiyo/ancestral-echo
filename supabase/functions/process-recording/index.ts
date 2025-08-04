@@ -1,0 +1,347 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { recordingId } = await req.json();
+    
+    if (!recordingId) {
+      throw new Error('Recording ID is required');
+    }
+
+    console.log('Processing recording:', recordingId);
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get recording details
+    const { data: recording, error: recordingError } = await supabase
+      .from('recordings')
+      .select(`
+        *,
+        family_members (
+          id,
+          name,
+          bio,
+          relationship
+        )
+      `)
+      .eq('id', recordingId)
+      .single();
+
+    if (recordingError || !recording) {
+      throw new Error('Recording not found');
+    }
+
+    console.log('Found recording:', recording.id);
+
+    // Update status to processing
+    await supabase
+      .from('recordings')
+      .update({ processing_status: 'processing' })
+      .eq('id', recordingId);
+
+    // Step 1: Transcribe audio using OpenAI Whisper
+    console.log('Starting transcription...');
+    
+    // Download audio file
+    const { data: audioData } = await supabase.storage
+      .from('recordings')
+      .download(recording.audio_url.split('/').pop());
+
+    if (!audioData) {
+      throw new Error('Failed to download audio file');
+    }
+
+    // Transcribe with OpenAI
+    const formData = new FormData();
+    formData.append('file', audioData, 'audio.webm');
+    formData.append('model', 'whisper-1');
+
+    const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+      },
+      body: formData,
+    });
+
+    if (!transcriptionResponse.ok) {
+      throw new Error('Failed to transcribe audio');
+    }
+
+    const transcriptionResult = await transcriptionResponse.json();
+    const transcription = transcriptionResult.text;
+
+    console.log('Transcription completed');
+
+    // Update recording with transcription
+    await supabase
+      .from('recordings')
+      .update({ transcription })
+      .eq('id', recordingId);
+
+    // Step 2: Process transcription into stories using GPT
+    console.log('Processing stories...');
+    
+    const storyPrompt = `
+    You are an AI family historian. Analyze this family recording transcription and extract meaningful stories. 
+
+    Family Member: ${recording.family_members.name}
+    Relationship: ${recording.family_members.relationship || 'Unknown'}
+    Context: ${recording.context || 'General conversation'}
+    Bio: ${recording.family_members.bio || 'No bio available'}
+
+    Transcription:
+    "${transcription}"
+
+    Please extract and format distinct stories from this transcription. For each story, provide:
+    1. A clear, descriptive title
+    2. The full story content (clean, readable prose)
+    3. Category (childhood, family_traditions, career, love_story, wisdom, funny_moment, historical, other)
+    4. Emotional tone (happy, sad, nostalgic, funny, serious, proud, grateful, other)
+    5. Keywords (3-7 relevant keywords)
+    6. Themes (2-4 main themes)
+
+    Return ONLY a valid JSON array with this structure:
+    [
+      {
+        "title": "Story title",
+        "content": "Full story content in readable prose",
+        "category": "category_name",
+        "emotional_tone": "tone",
+        "keywords": ["keyword1", "keyword2", "keyword3"],
+        "themes": ["theme1", "theme2"]
+      }
+    ]
+
+    If no clear stories can be extracted, return an empty array [].
+    `;
+
+    const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a family historian AI that extracts and formats family stories. Always return valid JSON.' },
+          { role: 'user', content: storyPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!gptResponse.ok) {
+      throw new Error('Failed to process stories with GPT');
+    }
+
+    const gptResult = await gptResponse.json();
+    let stories;
+    
+    try {
+      stories = JSON.parse(gptResult.choices[0].message.content);
+    } catch (e) {
+      console.error('Failed to parse GPT response as JSON:', gptResult.choices[0].message.content);
+      stories = [];
+    }
+
+    console.log('Extracted stories:', stories.length);
+
+    // Step 3: Save stories to database
+    const storyInserts = stories.map((story: any) => ({
+      user_id: recording.user_id,
+      family_member_id: recording.family_member_id,
+      recording_id: recording.id,
+      title: story.title,
+      content: story.content,
+      category: story.category,
+      emotional_tone: story.emotional_tone,
+      keywords: story.keywords,
+      themes: story.themes,
+    }));
+
+    if (storyInserts.length > 0) {
+      const { error: storiesError } = await supabase
+        .from('stories')
+        .insert(storyInserts);
+
+      if (storiesError) {
+        console.error('Error inserting stories:', storiesError);
+      }
+    }
+
+    // Step 4: Update or create persona
+    console.log('Updating persona...');
+    
+    // Get all stories for this family member to build knowledge base
+    const { data: allStories } = await supabase
+      .from('stories')
+      .select('title, content, emotional_tone, themes, keywords')
+      .eq('family_member_id', recording.family_member_id);
+
+    if (allStories && allStories.length > 0) {
+      // Build knowledge base from all stories
+      const knowledgeBase = allStories.map(s => 
+        `Title: ${s.title}\nContent: ${s.content}\nTone: ${s.emotional_tone}\nThemes: ${s.themes?.join(', ')}`
+      ).join('\n\n---\n\n');
+
+      // Extract personality traits and conversation style
+      const personalityPrompt = `
+      Based on these family stories about ${recording.family_members.name}, create a personality profile and conversation style.
+      
+      Stories:
+      ${knowledgeBase}
+
+      Return ONLY valid JSON with this structure:
+      {
+        "personality_traits": {
+          "speaking_style": "description of how they speak",
+          "values": ["core values they demonstrate"],
+          "interests": ["main interests and passions"],
+          "characteristics": ["personality characteristics"],
+          "life_philosophy": "their approach to life"
+        },
+        "conversation_style": {
+          "greeting_style": "how they typically greet people",
+          "storytelling_approach": "how they tell stories",
+          "humor_style": "their sense of humor",
+          "advice_giving": "how they give advice",
+          "emotional_expression": "how they express emotions"
+        }
+      }
+      `;
+
+      const personalityResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'You are an AI that analyzes family stories to create personality profiles. Always return valid JSON.' },
+            { role: 'user', content: personalityPrompt }
+          ],
+          temperature: 0.8,
+          max_tokens: 1500,
+        }),
+      });
+
+      let personalityData = {
+        personality_traits: {},
+        conversation_style: {}
+      };
+
+      if (personalityResponse.ok) {
+        const personalityResult = await personalityResponse.json();
+        try {
+          personalityData = JSON.parse(personalityResult.choices[0].message.content);
+        } catch (e) {
+          console.error('Failed to parse personality response as JSON');
+        }
+      }
+
+      // Check if persona exists
+      const { data: existingPersona } = await supabase
+        .from('personas')
+        .select('id')
+        .eq('family_member_id', recording.family_member_id)
+        .eq('user_id', recording.user_id)
+        .single();
+
+      if (existingPersona) {
+        // Update existing persona
+        await supabase
+          .from('personas')
+          .update({
+            knowledge_base: knowledgeBase,
+            personality_traits: personalityData.personality_traits,
+            conversation_style: personalityData.conversation_style,
+            training_status: 'completed',
+            is_active: true,
+          })
+          .eq('id', existingPersona.id);
+      } else {
+        // Create new persona
+        await supabase
+          .from('personas')
+          .insert({
+            user_id: recording.user_id,
+            family_member_id: recording.family_member_id,
+            knowledge_base: knowledgeBase,
+            personality_traits: personalityData.personality_traits,
+            conversation_style: personalityData.conversation_style,
+            training_status: 'completed',
+            is_active: true,
+          });
+      }
+
+      console.log('Persona updated successfully');
+    }
+
+    // Update recording status to completed
+    await supabase
+      .from('recordings')
+      .update({ processing_status: 'completed' })
+      .eq('id', recordingId);
+
+    console.log('Processing completed successfully');
+
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        message: 'Recording processed successfully',
+        storiesCount: stories.length 
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error) {
+    console.error('Error processing recording:', error);
+    
+    // Update recording status to failed if recordingId is available
+    try {
+      if (req.body) {
+        const body = await req.json();
+        if (body.recordingId) {
+          const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+          const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+          const supabase = createClient(supabaseUrl, supabaseKey);
+          
+          await supabase
+            .from('recordings')
+            .update({ processing_status: 'failed' })
+            .eq('id', body.recordingId);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to update recording status to failed:', e);
+    }
+
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+});

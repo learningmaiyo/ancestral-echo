@@ -252,7 +252,7 @@ const Conversations = () => {
               <h3 className="text-lg font-semibold">Recent Conversations</h3>
               <div className="grid gap-4">
                 {conversations.map((conversation) => (
-                  <Card key={conversation.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                  <Card key={conversation.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/chat/${conversation.id}`)}>
                     <CardContent className="p-6">
                       <div className="flex items-center gap-4">
                         {conversation.personas?.family_members?.photo_url ? (
@@ -279,7 +279,10 @@ const Conversations = () => {
                             <Clock className="h-3 w-3" />
                             <span>{formatDate(conversation.last_message_at)}</span>
                           </div>
-                          <Button size="sm" className="mt-2">
+                          <Button size="sm" onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/chat/${conversation.id}`);
+                          }}>
                             Continue Chat
                           </Button>
                         </div>
