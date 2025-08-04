@@ -325,15 +325,16 @@ const FamilyTreeFlow: React.FC = () => {
             border: '1px solid hsl(var(--border))',
           }}
         />
+        
+        {/* Move controls INSIDE ReactFlow */}
+        <FamilyTreeControls
+          onAddMember={handleAddMember}
+          onExport={handleExport}
+          onShare={handleShare}
+          familyMemberCount={familyMembers.length}
+          generationCount={generationCount}
+        />
       </ReactFlow>
-      
-      <FamilyTreeControls
-        onAddMember={handleAddMember}
-        onExport={handleExport}
-        onShare={handleShare}
-        familyMemberCount={familyMembers.length}
-        generationCount={generationCount}
-      />
     </div>
   );
 };
