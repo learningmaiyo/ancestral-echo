@@ -144,6 +144,8 @@ export type Database = {
           updated_at: string
           user_id: string
           voice_model_id: string | null
+          voice_model_status: string | null
+          voice_samples_count: number | null
         }
         Insert: {
           conversation_style?: Json | null
@@ -159,6 +161,8 @@ export type Database = {
           updated_at?: string
           user_id: string
           voice_model_id?: string | null
+          voice_model_status?: string | null
+          voice_samples_count?: number | null
         }
         Update: {
           conversation_style?: Json | null
@@ -174,6 +178,8 @@ export type Database = {
           updated_at?: string
           user_id?: string
           voice_model_id?: string | null
+          voice_model_status?: string | null
+          voice_samples_count?: number | null
         }
         Relationships: [
           {
@@ -303,6 +309,57 @@ export type Database = {
           },
           {
             foreignKeyName: "stories_recording_id_fkey"
+            columns: ["recording_id"]
+            isOneToOne: false
+            referencedRelation: "recordings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_samples: {
+        Row: {
+          audio_url: string
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          is_used_for_training: boolean | null
+          persona_id: string
+          quality_score: number | null
+          recording_id: string
+          updated_at: string
+        }
+        Insert: {
+          audio_url: string
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          is_used_for_training?: boolean | null
+          persona_id: string
+          quality_score?: number | null
+          recording_id: string
+          updated_at?: string
+        }
+        Update: {
+          audio_url?: string
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          is_used_for_training?: boolean | null
+          persona_id?: string
+          quality_score?: number | null
+          recording_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_samples_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_samples_recording_id_fkey"
             columns: ["recording_id"]
             isOneToOne: false
             referencedRelation: "recordings"

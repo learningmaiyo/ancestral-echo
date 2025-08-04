@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Send, User, Loader2, Heart, MessageCircle, Mic } from 'lucide-react';
+import { ArrowLeft, Send, User, Loader2, Heart, MessageCircle, Mic, Volume2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import VoiceInterface from '@/components/VoiceInterface';
@@ -21,7 +21,10 @@ interface Message {
 interface Conversation {
   id: string;
   title: string;
+  persona_id: string;
   personas: {
+    voice_model_id: string;
+    voice_model_status: string;
     family_members: {
       name: string;
       photo_url: string;
@@ -41,6 +44,8 @@ const Chat = () => {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [isGeneratingSpeech, setIsGeneratingSpeech] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -88,7 +93,10 @@ const Chat = () => {
         .select(`
           id,
           title,
+          persona_id,
           personas(
+            voice_model_id,
+            voice_model_status,
             family_members(name, photo_url)
           )
         `)
@@ -177,6 +185,62 @@ const Chat = () => {
       });
     } finally {
       setSending(false);
+    }
+  };
+
+  const playMessageAudio = async (audioContent: string) => {
+    try {
+      // Convert base64 to blob
+      const audioBlob = new Blob([
+        new Uint8Array(
+          atob(audioContent)
+            .split('')
+            .map(char => char.charCodeAt(0))
+        )
+      ], { type: 'audio/mpeg' });
+      
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      // Set playing state
+      setIsPlaying(true);
+      audio.onended = () => {
+        setIsPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+      
+      await audio.play();
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      setIsPlaying(false);
+    }
+  };
+
+  const generateSpeech = async (text: string) => {
+    try {
+      setIsGeneratingSpeech(true);
+      
+      const { data, error } = await supabase.functions.invoke('generate-speech', {
+        body: {
+          text,
+          personaId: conversation?.persona_id
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.audioContent) {
+        await playMessageAudio(data.audioContent);
+      }
+    } catch (error) {
+      console.error('Error generating speech:', error);
+      toast({
+        title: "Speech Generation Failed",
+        description: "Failed to generate speech with cloned voice",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingSpeech(false);
     }
   };
 
@@ -320,13 +384,30 @@ const Chat = () => {
                       }`}
                     >
                       <p className="text-sm">{message.content}</p>
-                      <p className={`text-xs mt-2 ${
-                        message.is_user_message 
-                          ? 'text-primary-foreground/70' 
-                          : 'text-muted-foreground'
-                      }`}>
-                        {formatTime(message.created_at)}
-                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className={`text-xs ${
+                          message.is_user_message 
+                            ? 'text-primary-foreground/70' 
+                            : 'text-muted-foreground'
+                        }`}>
+                          {formatTime(message.created_at)}
+                        </p>
+                        {!message.is_user_message && conversation?.personas.voice_model_status === 'ready' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => generateSpeech(message.content)}
+                            disabled={isGeneratingSpeech || isPlaying}
+                            className="h-6 w-6 p-0 ml-2"
+                          >
+                            {isGeneratingSpeech || isPlaying ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Volume2 className="h-3 w-3" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))

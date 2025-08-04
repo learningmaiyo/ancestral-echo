@@ -4,8 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { User, Calendar, Edit, Trash2, Plus, Mic } from 'lucide-react';
+import { User, Calendar, Edit, Trash2, Plus, Mic, Bot } from 'lucide-react';
 import { AddFamilyMemberForm } from '@/components/AddFamilyMemberForm';
+import VoiceCloneManager from '@/components/VoiceCloneManager';
 import { useToast } from '@/hooks/use-toast';
 
 interface FamilyMember {
@@ -22,8 +23,10 @@ export const FamilyMembersList = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const [personas, setPersonas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
 
   const fetchFamilyMembers = async () => {
     if (!user) return;
@@ -48,8 +51,32 @@ export const FamilyMembersList = () => {
     }
   };
 
+  const fetchPersonas = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('personas')
+        .select(`
+          *,
+          family_members(name, photo_url)
+        `)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error fetching personas:', error);
+        return;
+      }
+
+      setPersonas(data || []);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
   useEffect(() => {
     fetchFamilyMembers();
+    fetchPersonas();
   }, [user]);
 
   const handleDelete = async (id: string, name: string) => {
@@ -217,6 +244,16 @@ export const FamilyMembersList = () => {
                       <Mic className="h-4 w-4 mr-1" />
                       Record
                     </Button>
+                    {personas.find(p => p.family_member_id === member.id) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedPersona(personas.find(p => p.family_member_id === member.id)?.id)}
+                      >
+                        <Bot className="h-4 w-4 mr-1" />
+                        Voice Clone
+                      </Button>
+                    )}
                     <Button size="sm" variant="ghost">
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -232,6 +269,29 @@ export const FamilyMembersList = () => {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Voice Clone Manager Modal */}
+      {selectedPersona && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-background rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Voice Cloning</h2>
+                <Button
+                  variant="ghost"
+                  onClick={() => setSelectedPersona(null)}
+                >
+                  ×
+                </Button>
+              </div>
+              <VoiceCloneManager
+                personaId={selectedPersona}
+                familyMemberName={personas.find(p => p.id === selectedPersona)?.family_members?.name || 'Family Member'}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
