@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Mic, MicOff, Phone, PhoneOff, Volume2, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { RealtimeVoiceChat } from '@/utils/RealtimeVoiceChat';
+import { supabase } from '@/integrations/supabase/client';
 
 interface VoiceInterfaceProps {
   conversationId: string;
@@ -23,16 +24,66 @@ const VoiceInterface: React.FC<VoiceInterfaceProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const chatRef = useRef<RealtimeVoiceChat | null>(null);
   const [lastMessage, setLastMessage] = useState<string>('');
+  const [currentUserSpeech, setCurrentUserSpeech] = useState<string>('');
+  const [currentAIResponse, setCurrentAIResponse] = useState<string>('');
+
+  // Save message to database
+  const saveMessage = async (content: string, isUserMessage: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('conversation_messages')
+        .insert({
+          conversation_id: conversationId,
+          content: content.trim(),
+          is_user_message: isUserMessage
+        });
+
+      if (error) {
+        console.error('Error saving voice message:', error);
+      }
+    } catch (error) {
+      console.error('Error saving message:', error);
+    }
+  };
 
   const handleMessage = (event: any) => {
     console.log('Voice event:', event.type);
     onMessage?.(event);
 
-    // Update UI based on events
-    if (event.type === 'response.audio_transcript.delta') {
-      setLastMessage(prev => prev + (event.delta || ''));
-    } else if (event.type === 'response.audio_transcript.done') {
-      setLastMessage('');
+    // Handle different event types
+    switch (event.type) {
+      case 'conversation.item.input_audio_transcription.completed':
+        // User's speech has been transcribed
+        const userSpeech = event.transcript || '';
+        if (userSpeech.trim()) {
+          setCurrentUserSpeech(userSpeech);
+          saveMessage(userSpeech, true);
+        }
+        break;
+        
+      case 'response.audio_transcript.delta':
+        // AI is speaking - accumulate the response
+        setCurrentAIResponse(prev => prev + (event.delta || ''));
+        setLastMessage(prev => prev + (event.delta || ''));
+        break;
+        
+      case 'response.audio_transcript.done':
+        // AI finished speaking - save the complete response
+        if (currentAIResponse.trim()) {
+          saveMessage(currentAIResponse, false);
+        }
+        setCurrentAIResponse('');
+        setLastMessage('');
+        break;
+        
+      case 'response.done':
+        // Fallback - if we have accumulated AI response, save it
+        if (currentAIResponse.trim()) {
+          saveMessage(currentAIResponse, false);
+          setCurrentAIResponse('');
+        }
+        setLastMessage('');
+        break;
     }
   };
 
@@ -86,6 +137,8 @@ const VoiceInterface: React.FC<VoiceInterfaceProps> = ({
     setIsConnected(false);
     setIsSpeaking(false);
     setLastMessage('');
+    setCurrentUserSpeech('');
+    setCurrentAIResponse('');
     
     toast({
       title: "Voice Disconnected",
@@ -143,10 +196,20 @@ const VoiceInterface: React.FC<VoiceInterfaceProps> = ({
           </div>
 
           {/* Live Transcript */}
-          {lastMessage && (
-            <div className="bg-muted p-3 rounded-lg text-sm text-left">
-              <span className="font-medium">{familyMemberName}: </span>
-              {lastMessage}
+          {(lastMessage || currentUserSpeech) && (
+            <div className="bg-muted p-3 rounded-lg text-sm text-left space-y-2">
+              {currentUserSpeech && (
+                <div>
+                  <span className="font-medium text-blue-600">You: </span>
+                  {currentUserSpeech}
+                </div>
+              )}
+              {lastMessage && (
+                <div>
+                  <span className="font-medium">{familyMemberName}: </span>
+                  {lastMessage}
+                </div>
+              )}
             </div>
           )}
 

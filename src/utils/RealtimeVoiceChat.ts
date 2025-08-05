@@ -220,6 +220,9 @@ export class RealtimeVoiceChat {
       case 'session.updated':
         console.log('Session updated successfully');
         break;
+      case 'conversation.item.input_audio_transcription.completed':
+        console.log('User speech transcribed:', event.transcript);
+        break;
       case 'response.audio.delta':
         console.log('Received audio delta - AI is speaking');
         this.onSpeakingChange(true);
@@ -227,6 +230,12 @@ export class RealtimeVoiceChat {
       case 'response.audio.done':
         console.log('Audio response completed');
         this.onSpeakingChange(false);
+        break;
+      case 'response.audio_transcript.delta':
+        console.log('AI transcript delta received');
+        break;
+      case 'response.audio_transcript.done':
+        console.log('AI transcript completed');
         break;
       case 'response.done':
         console.log('Response completed');
@@ -240,6 +249,12 @@ export class RealtimeVoiceChat {
         break;
       case 'input_audio_buffer.speech_stopped':
         console.log('User stopped speaking');
+        break;
+      case 'input_audio_buffer.committed':
+        console.log('User audio committed for processing');
+        break;
+      case 'conversation.item.created':
+        console.log('Conversation item created:', event.item?.type);
         break;
     }
   }
