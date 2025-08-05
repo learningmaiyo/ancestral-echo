@@ -20,11 +20,11 @@ serve(async (req) => {
 
     console.log('Creating AssemblyAI temporary token...');
 
-    // Create a temporary token for real-time transcription
+    // Create a temporary token for real-time transcription using Universal Streaming
     const response = await fetch("https://api.assemblyai.com/v2/realtime/token", {
       method: "POST",
       headers: {
-        "Authorization": ASSEMBLYAI_API_KEY,
+        "Authorization": `Bearer ${ASSEMBLYAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
