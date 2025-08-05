@@ -64,6 +64,7 @@ export class RealtimeVoiceChat {
   private audioEl: HTMLAudioElement;
   private recorder: AudioRecorder | null = null;
   private isConnected = false;
+  private stream: MediaStream | null = null;
 
   constructor(
     private onMessage: (message: any) => void,
@@ -101,16 +102,24 @@ export class RealtimeVoiceChat {
         this.audioEl.srcObject = e.streams[0];
       };
 
-      // Add local audio track for microphone
+      // Add local audio track for microphone with specific constraints for OpenAI
       const ms = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           sampleRate: 24000,
           channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
+          echoCancellation: false,  // Disable for better transcription
+          noiseSuppression: false,  // Disable for better transcription
+          autoGainControl: false,   // Disable for better transcription
+          sampleSize: 16
         }
       });
+      
+      // Store reference to stop later
+      if (this.stream) {
+        this.stream.getTracks().forEach(track => track.stop());
+      }
+      this.stream = ms;
+      
       this.pc.addTrack(ms.getTracks()[0]);
 
       // Set up data channel for control messages
@@ -179,9 +188,9 @@ export class RealtimeVoiceChat {
       return;
     }
 
-    console.log('Configuring session for audio output...');
+    console.log('Configuring session for audio input/output...');
     
-    // Send session update to ensure audio output is enabled
+    // Send session update with corrected configuration for transcription
     const sessionUpdate = {
       type: 'session.update',
       session: {
@@ -197,7 +206,8 @@ export class RealtimeVoiceChat {
           type: 'server_vad',
           threshold: 0.5,
           prefix_padding_ms: 300,
-          silence_duration_ms: 1000
+          silence_duration_ms: 1000,
+          create_response: true
         },
         tool_choice: 'auto',
         temperature: 0.8,
@@ -206,7 +216,7 @@ export class RealtimeVoiceChat {
     };
 
     this.dc.send(JSON.stringify(sessionUpdate));
-    console.log('Session configuration sent');
+    console.log('Session configuration sent with improved transcription settings');
   }
 
   private handleRealtimeEvent(event: any) {
@@ -304,6 +314,13 @@ export class RealtimeVoiceChat {
     console.log('Disconnecting voice chat...');
     
     this.recorder?.stop();
+    
+    // Clean up stream tracks
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => track.stop());
+      this.stream = null;
+    }
+    
     this.dc?.close();
     this.pc?.close();
     
