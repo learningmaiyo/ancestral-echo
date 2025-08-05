@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Debug function called');
+    console.log('Debug audio function started');
     
     const body = await req.json().catch(() => ({}));
     console.log('Request body:', body);
