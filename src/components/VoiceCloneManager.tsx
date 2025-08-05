@@ -39,34 +39,32 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
 
   // Auto-trigger voice cloning when good recordings are available
   useEffect(() => {
-    if (!autoTriggerChecked && voiceStatus === 'pending' && availableRecordings.length > 0) {
+    if (voiceStatus === 'pending' && availableRecordings.length > 0 && !autoTriggerChecked) {
       const goodRecordings = availableRecordings.filter(r => 
         r.duration_seconds >= 30 && r.duration_seconds <= 600
       );
       
       if (goodRecordings.length >= 1) {
+        console.log('Auto-triggering voice cloning with', goodRecordings.length, 'recordings');
         setAutoTriggerChecked(true);
-        selectBestSamples();
         
-        // Auto-start if we have sufficient good samples
-        if (goodRecordings.length >= 1) {
-          setTimeout(() => {
-            if (selectedSamples.length === 0) {
-              const autoSamples = goodRecordings
-                .sort((a, b) => b.duration_seconds - a.duration_seconds)
-                .slice(0, 3)
-                .map(recording => ({
-                  recordingId: recording.id,
-                  audioUrl: recording.audio_url,
-                  durationSeconds: recording.duration_seconds,
-                  qualityScore: 0.85
-                }));
-              
-              setSelectedSamples(autoSamples);
-              startAutoVoiceCloning(autoSamples);
-            }
-          }, 1000);
-        }
+        // Auto-select samples
+        const autoSamples = goodRecordings
+          .sort((a, b) => b.duration_seconds - a.duration_seconds)
+          .slice(0, 3)
+          .map(recording => ({
+            recordingId: recording.id,
+            audioUrl: recording.audio_url,
+            durationSeconds: recording.duration_seconds,
+            qualityScore: 0.85
+          }));
+        
+        setSelectedSamples(autoSamples);
+        
+        // Auto-start voice cloning
+        setTimeout(() => {
+          startAutoVoiceCloning(autoSamples);
+        }, 500);
       }
     }
   }, [voiceStatus, availableRecordings, autoTriggerChecked]);
