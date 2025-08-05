@@ -133,6 +133,7 @@ export type Database = {
         Row: {
           conversation_style: Json | null
           created_at: string
+          elevenlabs_agent_id: string | null
           family_member_id: string
           id: string
           is_active: boolean | null
@@ -150,6 +151,7 @@ export type Database = {
         Insert: {
           conversation_style?: Json | null
           created_at?: string
+          elevenlabs_agent_id?: string | null
           family_member_id: string
           id?: string
           is_active?: boolean | null
@@ -167,6 +169,7 @@ export type Database = {
         Update: {
           conversation_style?: Json | null
           created_at?: string
+          elevenlabs_agent_id?: string | null
           family_member_id?: string
           id?: string
           is_active?: boolean | null

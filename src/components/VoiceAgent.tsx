@@ -317,18 +317,15 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
           <div className="text-sm text-muted-foreground space-y-2">
             <p>Click "Start Voice Chat" to begin a voice conversation with {familyMemberName}.</p>
             <p>Make sure your microphone is working and you're in a quiet environment.</p>
-            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="font-medium text-amber-800 mb-2">Setup Required:</p>
-              <p className="text-amber-700 text-xs">
-                To enable full ElevenLabs Conversational AI, you need to:
-              </p>
-              <ol className="text-amber-700 text-xs mt-1 ml-4 list-decimal space-y-1">
-                <li>Create a Conversational AI agent in your ElevenLabs dashboard</li>
-                <li>Configure the agent with the persona's voice and personality</li>
-                <li>Get the agent ID and update the code</li>
-                <li>Uncomment the actual ElevenLabs integration code</li>
-              </ol>
-            </div>
+            {!agentConfig?.voiceModelId && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="font-medium text-amber-800 mb-2">Voice Clone Required:</p>
+                <p className="text-amber-700 text-xs">
+                  To enable voice chat, you need to clone {familyMemberName}'s voice first. 
+                  Go to the Family Members page and use the Voice Clone Manager to upload audio samples.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
