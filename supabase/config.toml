@@ -1,22 +1,22 @@
 project_id = "voypgvppnnmacbjboovn"
 
 [functions.process-recording]
-verify_jwt = false
+verify_jwt = true
 
 [functions.chat-with-persona]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-voice-session]
-verify_jwt = false
+verify_jwt = true
 
 [functions.clone-voice]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-speech]
-verify_jwt = false
+verify_jwt = true
 
 [functions.retry-recording-processing]
-verify_jwt = false
+verify_jwt = true
 
 [functions.test-openai]
 verify_jwt = false

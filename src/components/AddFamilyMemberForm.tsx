@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, User, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { familyMemberSchema, fileUploadSchema, sanitizeFileName } from '@/lib/validation';
+import { auditLog, handleSecureError, validateFileContent } from '@/lib/security';
 
 interface AddFamilyMemberFormProps {
   onSuccess?: () => void;
@@ -44,22 +46,43 @@ export const AddFamilyMemberForm = ({ onSuccess, onCancel }: AddFamilyMemberForm
     bio: '',
   });
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file before processing
+      const fileValidation = fileUploadSchema.safeParse({
+        filename: file.name,
+        size: file.size,
+        type: file.type
+      });
+
+      if (!fileValidation.success) {
+        setError(fileValidation.error.errors[0].message);
+        return;
+      }
+
+      // Validate file content for security
+      const contentValidation = await validateFileContent(file);
+      if (!contentValidation.isValid) {
+        setError(contentValidation.error || 'Invalid file content');
+        return;
+      }
+
       setPhotoFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
         setPhotoPreview(e.target?.result as string);
       };
       reader.readAsDataURL(file);
+      setError(''); // Clear any previous errors
     }
   };
 
   const uploadPhoto = async (file: File, familyMemberId: string): Promise<string | null> => {
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user?.id}/${familyMemberId}.${fileExt}`;
+      const sanitizedFileName = sanitizeFileName(`${familyMemberId}.${fileExt}`);
+      const fileName = `${user?.id}/${sanitizedFileName}`;
       
       const { error: uploadError } = await supabase.storage
         .from('family-photos')
@@ -89,7 +112,20 @@ export const AddFamilyMemberForm = ({ onSuccess, onCancel }: AddFamilyMemberForm
     setError('');
 
     try {
-      // First create the family member record
+      // Validate input data with new schema
+      const validationResult = familyMemberSchema.safeParse({
+        name: formData.name,
+        relationship: formData.relationship || undefined,
+        birth_date: formData.birth_date || undefined,
+        bio: formData.bio || undefined
+      });
+
+      if (!validationResult.success) {
+        const firstError = validationResult.error.errors[0];
+        throw new Error(firstError.message);
+      }
+
+      // Create the family member record
       const { data: familyMember, error: insertError } = await supabase
         .from('family_members')
         .insert({
@@ -124,6 +160,12 @@ export const AddFamilyMemberForm = ({ onSuccess, onCancel }: AddFamilyMemberForm
         }
       }
 
+      // Audit log the action
+      await auditLog('family_member_added', user.id, { 
+        name: formData.name, 
+        relationship: formData.relationship 
+      });
+
       toast({
         title: 'Family member added!',
         description: `${formData.name} has been added to your family.`,
@@ -137,7 +179,8 @@ export const AddFamilyMemberForm = ({ onSuccess, onCancel }: AddFamilyMemberForm
       onSuccess?.();
     } catch (error: any) {
       console.error('Error adding family member:', error);
-      setError(error.message || 'Failed to add family member');
+      const secureError = handleSecureError(error);
+      setError(secureError.message);
     } finally {
       setLoading(false);
     }
