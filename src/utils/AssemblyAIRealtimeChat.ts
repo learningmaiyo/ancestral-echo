@@ -44,8 +44,8 @@ export class AssemblyAIRealtimeChat {
         throw new Error(error?.message || "Failed to get AssemblyAI token");
       }
 
-      // Connect to AssemblyAI Streaming API
-      const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${data.token}`;
+      // Connect to AssemblyAI Universal-Streaming API
+      const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&token=${data.token}`;
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
@@ -59,12 +59,17 @@ export class AssemblyAIRealtimeChat {
         const data = JSON.parse(event.data);
         console.log('AssemblyAI response:', data);
 
-        if (data.message_type === 'PartialTranscript') {
-          this.onTranscript(data.text, false);
-        } else if (data.message_type === 'FinalTranscript') {
-          this.onTranscript(data.text, true);
-        } else if (data.message_type === 'SessionBegins') {
-          console.log('AssemblyAI session started');
+        if (data.type === 'Turn') {
+          // Universal-Streaming uses Turn objects with transcript field
+          if (data.end_of_turn) {
+            this.onTranscript(data.transcript, true);
+          } else {
+            this.onTranscript(data.transcript, false);
+          }
+        } else if (data.type === 'Begin') {
+          console.log('AssemblyAI session started:', data.id);
+        } else if (data.type === 'Termination') {
+          console.log('AssemblyAI session terminated');
         }
       };
 
@@ -106,22 +111,8 @@ export class AssemblyAIRealtimeChat {
         int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
       }
 
-      // Convert to base64 for transmission
-      const uint8Data = new Uint8Array(int16Data.buffer);
-      let binary = '';
-      const chunkSize = 0x8000;
-      
-      for (let i = 0; i < uint8Data.length; i += chunkSize) {
-        const chunk = uint8Data.subarray(i, Math.min(i + chunkSize, uint8Data.length));
-        binary += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      
-      const base64Data = btoa(binary);
-
-      // Send audio data to AssemblyAI
-      this.ws.send(JSON.stringify({
-        audio_data: base64Data
-      }));
+      // Send raw binary audio data to AssemblyAI Universal-Streaming
+      this.ws.send(int16Data.buffer);
     };
 
     this.source.connect(this.processor);
