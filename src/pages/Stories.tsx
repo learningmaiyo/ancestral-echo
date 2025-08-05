@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, BookOpen, Clock, User, Filter } from 'lucide-react';
+import { ArrowLeft, Search, BookOpen, Clock, User, Filter, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 
 interface Story {
   id: string;
@@ -31,6 +32,8 @@ const Stories = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [stuckRecordings, setStuckRecordings] = useState<any[]>([]);
+  const [retryLoading, setRetryLoading] = useState<string | null>(null);
 
   const fetchStories = async () => {
     if (!user) return;
@@ -65,8 +68,62 @@ const Stories = () => {
     }
   };
 
+  const checkStuckRecordings = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('recordings')
+        .select(`
+          id,
+          audio_url,
+          processing_status,
+          context,
+          created_at,
+          family_members(name)
+        `)
+        .eq('user_id', user.id)
+        .in('processing_status', ['processing', 'failed'])
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching stuck recordings:', error);
+        return;
+      }
+
+      setStuckRecordings(data || []);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  const retryRecording = async (recordingId: string) => {
+    setRetryLoading(recordingId);
+    try {
+      const { data, error } = await supabase.functions.invoke('retry-recording-processing', {
+        body: { recordingId }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success('Recording processing restarted successfully!');
+      
+      // Refresh both stuck recordings and stories
+      await checkStuckRecordings();
+      await fetchStories();
+    } catch (error: any) {
+      console.error('Error retrying recording:', error);
+      toast.error('Failed to retry processing: ' + error.message);
+    } finally {
+      setRetryLoading(null);
+    }
+  };
+
   useEffect(() => {
     fetchStories();
+    checkStuckRecordings();
   }, [user]);
 
   const filteredStories = stories.filter(story => {
@@ -186,6 +243,50 @@ const Stories = () => {
               </p>
             </div>
           </div>
+
+          {/* Stuck Recordings Alert */}
+          {stuckRecordings.length > 0 && (
+            <Card className="border-orange-200 bg-orange-50">
+              <CardHeader>
+                <CardTitle className="text-orange-800 flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5" />
+                  Recordings Need Processing
+                </CardTitle>
+                <CardDescription className="text-orange-700">
+                  {stuckRecordings.length} recording(s) failed to process or are stuck. Click retry to process them again.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {stuckRecordings.map((recording) => (
+                  <div key={recording.id} className="flex items-center justify-between p-3 bg-white rounded border">
+                    <div className="flex-1">
+                      <div className="font-medium text-sm">
+                        {recording.context || 'Recording'} - {recording.family_members?.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Status: {recording.processing_status} • {formatDate(recording.created_at)}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => retryRecording(recording.id)}
+                      disabled={retryLoading === recording.id}
+                    >
+                      {retryLoading === recording.id ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          Retry
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Search and Filters */}
           <div className="flex gap-4 items-center">

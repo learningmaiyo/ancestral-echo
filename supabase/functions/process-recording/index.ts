@@ -75,7 +75,9 @@ serve(async (req) => {
 
     // Transcribe with OpenAI
     const formData = new FormData();
-    formData.append('file', audioData, 'audio.webm');
+    // Extract filename from URL to determine the correct file extension
+    const fileName = recording.audio_url.split('/').pop() || 'audio.mp3';
+    formData.append('file', new File([audioData], fileName, { type: 'audio/mpeg' }));
     formData.append('model', 'whisper-1');
 
     const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
