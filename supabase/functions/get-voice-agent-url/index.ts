@@ -19,10 +19,24 @@ serve(async (req) => {
       throw new Error('conversationId is required');
     }
 
+    // Get user from JWT token
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Authorization header is required');
+    }
+
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get user from the auth header
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      throw new Error('Invalid authentication token');
+    }
 
     // Get the conversation and persona details
     const { data: conversation, error: convError } = await supabase
@@ -38,6 +52,7 @@ serve(async (req) => {
         )
       `)
       .eq('id', conversationId)
+      .eq('user_id', user.id)
       .single();
 
     if (convError || !conversation) {
