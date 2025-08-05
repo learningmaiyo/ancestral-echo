@@ -40,9 +40,16 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
   // Auto-trigger voice cloning when good recordings are available
   useEffect(() => {
     if (voiceStatus === 'pending' && availableRecordings.length > 0 && !autoTriggerChecked) {
+      console.log('Checking recordings for auto-trigger:', availableRecordings.map(r => ({ 
+        id: r.id, 
+        duration: r.duration_seconds 
+      })));
+      
       const goodRecordings = availableRecordings.filter(r => 
-        r.duration_seconds >= 30 && r.duration_seconds <= 600
+        r.duration_seconds >= 30 && r.duration_seconds <= 1200 // 30 seconds to 20 minutes
       );
+      
+      console.log('Good recordings after filtering:', goodRecordings.length, 'out of', availableRecordings.length);
       
       if (goodRecordings.length >= 1) {
         console.log('Auto-triggering voice cloning with', goodRecordings.length, 'recordings');
