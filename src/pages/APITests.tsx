@@ -111,10 +111,25 @@ const APITests = () => {
       // Use one of the failed recording IDs
       const recordingId = "6bd7ba7e-824a-42f2-b370-1038d00444e4";
       
+      console.log('Calling debug-audio function with recordingId:', recordingId);
+      
       const response = await supabase.functions.invoke('debug-audio', {
         body: { recordingId }
       });
+      
+      console.log('Debug function response:', response);
+      
+      // Handle both error and data cases
+      if (response.error) {
+        throw new Error(response.error.message || 'Function invocation failed');
+      }
+      
       const result = response.data;
+      
+      // If result is null or undefined, create a default error result
+      if (!result) {
+        throw new Error('No response data received from debug function');
+      }
       
       setAudioDebugResult(result);
       
@@ -126,21 +141,23 @@ const APITests = () => {
       } else {
         toast({
           title: "Audio Debug Failed",
-          description: result.error,
+          description: result.error || result.message,
           variant: "destructive",
         });
       }
     } catch (error) {
+      console.error('Audio debug error:', error);
+      
       const errorResult = {
         success: false,
         message: "Debug test failed",
-        error: error.message
+        error: error.message || 'Unknown error occurred'
       };
       setAudioDebugResult(errorResult);
       
       toast({
         title: "Audio Debug Error",
-        description: error.message,
+        description: error.message || 'Unknown error occurred',
         variant: "destructive",
       });
     } finally {
