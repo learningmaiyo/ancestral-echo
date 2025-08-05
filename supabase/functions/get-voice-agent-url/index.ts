@@ -44,11 +44,15 @@ serve(async (req) => {
       .select(`
         *,
         personas (
-          name,
+          id,
           personality_traits,
           conversation_style,
           voice_model_id,
-          knowledge_base
+          knowledge_base,
+          family_member_id,
+          family_members (
+            name
+          )
         )
       `)
       .eq('id', conversationId)
@@ -70,8 +74,11 @@ serve(async (req) => {
       throw new Error('ELEVENLABS_API_KEY is not set');
     }
 
+    // Get the family member name
+    const familyMemberName = persona.family_members?.name || 'Unknown';
+
     // Create a custom prompt for the voice agent based on the persona
-    const systemPrompt = `You are ${persona.name}, speaking as if you were alive and talking to a family member. 
+    const systemPrompt = `You are ${familyMemberName}, speaking as if you were alive and talking to a family member. 
 
 Personality: ${persona.personality_traits}
 Communication Style: ${persona.conversation_style}
@@ -79,7 +86,7 @@ Communication Style: ${persona.conversation_style}
 Background Knowledge: ${persona.knowledge_base}
 
 Important instructions:
-- Speak naturally and conversationally as ${persona.name}
+- Speak naturally and conversationally as ${familyMemberName}
 - Reference your memories and experiences from your knowledge base when relevant
 - Keep responses concise but warm and personal
 - Ask follow-up questions to engage in meaningful conversation
@@ -93,12 +100,12 @@ Important instructions:
     
     const agentConfig = {
       systemPrompt,
-      personaName: persona.name,
+      personaName: familyMemberName,
       voiceId: persona.voice_model_id || "9BWtsMINqrJLrRacOk9x", // Default to Aria voice
       conversationId: conversationId
     };
 
-    console.log(`Generated voice agent config for persona: ${persona.name}`);
+    console.log(`Generated voice agent config for persona: ${familyMemberName}`);
 
     return new Response(JSON.stringify({ 
       agentConfig,
