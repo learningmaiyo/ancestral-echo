@@ -13,8 +13,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let recordingId: string;
+  
   try {
-    const { recordingId } = await req.json();
+    const body = await req.json();
+    recordingId = body.recordingId;
     
     if (!recordingId) {
       throw new Error('Recording ID is required');
@@ -58,9 +61,13 @@ serve(async (req) => {
     console.log('Starting transcription...');
     
     // Download audio file
+    // Extract the file path from the full URL
+    const urlPath = new URL(recording.audio_url).pathname;
+    const filePath = urlPath.split('/storage/v1/object/public/recordings/')[1];
+    
     const { data: audioData } = await supabase.storage
       .from('recordings')
-      .download(recording.audio_url.split('/').pop());
+      .download(filePath);
 
     if (!audioData) {
       throw new Error('Failed to download audio file');
@@ -318,22 +325,19 @@ serve(async (req) => {
     console.error('Error processing recording:', error);
     
     // Update recording status to failed if recordingId is available
-    try {
-      if (req.body) {
-        const body = await req.json();
-        if (body.recordingId) {
-          const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-          const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-          const supabase = createClient(supabaseUrl, supabaseKey);
-          
-          await supabase
-            .from('recordings')
-            .update({ processing_status: 'failed' })
-            .eq('id', body.recordingId);
-        }
+    if (recordingId) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        
+        await supabase
+          .from('recordings')
+          .update({ processing_status: 'failed' })
+          .eq('id', recordingId);
+      } catch (e) {
+        console.error('Failed to update recording status to failed:', e);
       }
-    } catch (e) {
-      console.error('Failed to update recording status to failed:', e);
     }
 
     return new Response(
