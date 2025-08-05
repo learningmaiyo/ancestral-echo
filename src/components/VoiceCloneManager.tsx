@@ -30,11 +30,46 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
   const [availableRecordings, setAvailableRecordings] = useState<any[]>([]);
   const [selectedSamples, setSelectedSamples] = useState<AudioSample[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [autoTriggerChecked, setAutoTriggerChecked] = useState(false);
 
   useEffect(() => {
     fetchPersonaVoiceStatus();
     fetchAvailableRecordings();
   }, [personaId]);
+
+  // Auto-trigger voice cloning when good recordings are available
+  useEffect(() => {
+    if (!autoTriggerChecked && voiceStatus === 'pending' && availableRecordings.length > 0) {
+      const goodRecordings = availableRecordings.filter(r => 
+        r.duration_seconds >= 30 && r.duration_seconds <= 600
+      );
+      
+      if (goodRecordings.length >= 1) {
+        setAutoTriggerChecked(true);
+        selectBestSamples();
+        
+        // Auto-start if we have sufficient good samples
+        if (goodRecordings.length >= 1) {
+          setTimeout(() => {
+            if (selectedSamples.length === 0) {
+              const autoSamples = goodRecordings
+                .sort((a, b) => b.duration_seconds - a.duration_seconds)
+                .slice(0, 3)
+                .map(recording => ({
+                  recordingId: recording.id,
+                  audioUrl: recording.audio_url,
+                  durationSeconds: recording.duration_seconds,
+                  qualityScore: 0.85
+                }));
+              
+              setSelectedSamples(autoSamples);
+              startAutoVoiceCloning(autoSamples);
+            }
+          }, 1000);
+        }
+      }
+    }
+  }, [voiceStatus, availableRecordings, autoTriggerChecked]);
 
   const fetchPersonaVoiceStatus = async () => {
     try {
@@ -102,6 +137,51 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
     });
   };
 
+  const startAutoVoiceCloning = async (samples: AudioSample[]) => {
+    if (samples.length === 0) return;
+
+    setIsProcessing(true);
+    setVoiceStatus('training');
+
+    toast({
+      title: "Auto-Starting Voice Cloning",
+      description: `Found ${samples.length} quality recordings. Starting voice cloning for ${familyMemberName}...`,
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('clone-voice', {
+        body: {
+          personaId,
+          voiceName: familyMemberName,
+          audioSamples: samples
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        setVoiceStatus('ready');
+        setVoiceModelId(data.voiceId);
+        setSamplesCount(samples.length);
+        
+        toast({
+          title: "Voice Cloning Successful",
+          description: `${familyMemberName}'s voice has been cloned successfully!`,
+        });
+      }
+    } catch (error) {
+      console.error('Voice cloning error:', error);
+      setVoiceStatus('failed');
+      toast({
+        title: "Voice Cloning Failed",
+        description: error.message || 'Failed to clone voice',
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const startVoiceCloning = async () => {
     if (selectedSamples.length === 0) {
       toast({
@@ -113,6 +193,7 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
     }
 
     setIsProcessing(true);
+    setVoiceStatus('training');
 
     try {
       const { data, error } = await supabase.functions.invoke('clone-voice', {
@@ -128,6 +209,7 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
       if (data.success) {
         setVoiceStatus('ready');
         setVoiceModelId(data.voiceId);
+        setSamplesCount(selectedSamples.length);
         
         toast({
           title: "Voice Cloning Successful",
@@ -136,6 +218,7 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
       }
     } catch (error) {
       console.error('Voice cloning error:', error);
+      setVoiceStatus('failed');
       toast({
         title: "Voice Cloning Failed",
         description: error.message || 'Failed to clone voice',
@@ -227,66 +310,73 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
 
         {voiceStatus === 'pending' && (
           <div className="space-y-4">
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-blue-800">
-                Create a voice clone of {familyMemberName} using their recorded audio.
-              </p>
-              <p className="text-sm text-blue-600 mt-1">
-                Available recordings: {availableRecordings.length}
-              </p>
-            </div>
-
-            {availableRecordings.length > 0 && (
-              <>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium">Audio Samples</h4>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={selectBestSamples}
-                    >
-                      Auto-Select Best
-                    </Button>
-                  </div>
-                  
-                  {selectedSamples.length > 0 && (
-                    <div className="text-sm text-muted-foreground">
-                      Selected {selectedSamples.length} samples 
-                      ({selectedSamples.reduce((total, s) => total + s.durationSeconds, 0)} seconds total)
-                    </div>
-                  )}
+            {isProcessing ? (
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  <p className="text-blue-800 font-medium">
+                    Auto-starting voice cloning for {familyMemberName}...
+                  </p>
                 </div>
-
-                <Button 
-                  onClick={startVoiceCloning}
-                  disabled={isProcessing || selectedSamples.length === 0}
-                  className="w-full gap-2"
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Creating Voice Clone...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      Start Voice Cloning
-                    </>
-                  )}
-                </Button>
-              </>
-            )}
-
-            {availableRecordings.length === 0 && (
-              <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <p className="text-yellow-800">
-                  No processed recordings available for voice cloning.
-                </p>
-                <p className="text-sm text-yellow-600 mt-1">
-                  Record some audio first to create a voice clone.
+                <p className="text-sm text-blue-600">
+                  Using {selectedSamples.length} quality audio samples
                 </p>
               </div>
+            ) : (
+              <>
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-blue-800">
+                    Create a voice clone of {familyMemberName} using their recorded audio.
+                  </p>
+                  <p className="text-sm text-blue-600 mt-1">
+                    Available recordings: {availableRecordings.length}
+                  </p>
+                </div>
+
+                {availableRecordings.length > 0 && (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <h4 className="font-medium">Audio Samples</h4>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={selectBestSamples}
+                        >
+                          Auto-Select Best
+                        </Button>
+                      </div>
+                      
+                      {selectedSamples.length > 0 && (
+                        <div className="text-sm text-muted-foreground">
+                          Selected {selectedSamples.length} samples 
+                          ({selectedSamples.reduce((total, s) => total + s.durationSeconds, 0)} seconds total)
+                        </div>
+                      )}
+                    </div>
+
+                    <Button 
+                      onClick={startVoiceCloning}
+                      disabled={selectedSamples.length === 0}
+                      className="w-full gap-2"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Start Voice Cloning
+                    </Button>
+                  </>
+                )}
+
+                {availableRecordings.length === 0 && (
+                  <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <p className="text-yellow-800">
+                      No processed recordings available for voice cloning.
+                    </p>
+                    <p className="text-sm text-yellow-600 mt-1">
+                      Record some audio first to create a voice clone.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -301,7 +391,10 @@ const VoiceCloneManager: React.FC<VoiceCloneManagerProps> = ({
             
             <Button 
               variant="outline" 
-              onClick={() => setVoiceStatus('pending')}
+              onClick={() => {
+                setVoiceStatus('pending');
+                setAutoTriggerChecked(false);
+              }}
               className="w-full"
             >
               Try Again
