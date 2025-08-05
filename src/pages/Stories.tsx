@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, BookOpen, Clock, User, Filter, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Search, BookOpen, Clock, User, Filter, RefreshCw, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
@@ -34,6 +34,7 @@ const Stories = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [stuckRecordings, setStuckRecordings] = useState<any[]>([]);
   const [retryLoading, setRetryLoading] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
   const fetchStories = async () => {
     if (!user) return;
@@ -118,6 +119,31 @@ const Stories = () => {
       toast.error('Failed to retry processing: ' + error.message);
     } finally {
       setRetryLoading(null);
+    }
+  };
+
+  const deleteRecording = async (recordingId: string) => {
+    setDeleteLoading(recordingId);
+    try {
+      const { error } = await supabase
+        .from('recordings')
+        .delete()
+        .eq('id', recordingId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success('Recording deleted successfully!');
+      
+      // Refresh stuck recordings and stories
+      await checkStuckRecordings();
+      await fetchStories();
+    } catch (error: any) {
+      console.error('Error deleting recording:', error);
+      toast.error('Failed to delete recording: ' + error.message);
+    } finally {
+      setDeleteLoading(null);
     }
   };
 
@@ -266,22 +292,39 @@ const Stories = () => {
                       <div className="text-xs text-muted-foreground">
                         Status: {recording.processing_status} • {formatDate(recording.created_at)}
                       </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => retryRecording(recording.id)}
-                      disabled={retryLoading === recording.id}
-                    >
-                      {retryLoading === recording.id ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-1" />
-                          Retry
-                        </>
-                      )}
-                    </Button>
+                     </div>
+                     <div className="flex items-center gap-2">
+                       <Button
+                         size="sm"
+                         variant="outline"
+                         onClick={() => retryRecording(recording.id)}
+                         disabled={retryLoading === recording.id || deleteLoading === recording.id}
+                       >
+                         {retryLoading === recording.id ? (
+                           <RefreshCw className="h-4 w-4 animate-spin" />
+                         ) : (
+                           <>
+                             <RefreshCw className="h-4 w-4 mr-1" />
+                             Retry
+                           </>
+                         )}
+                       </Button>
+                       <Button
+                         size="sm"
+                         variant="destructive"
+                         onClick={() => deleteRecording(recording.id)}
+                         disabled={retryLoading === recording.id || deleteLoading === recording.id}
+                       >
+                         {deleteLoading === recording.id ? (
+                           <RefreshCw className="h-4 w-4 animate-spin" />
+                         ) : (
+                           <>
+                             <Trash2 className="h-4 w-4 mr-1" />
+                             Delete
+                           </>
+                         )}
+                       </Button>
+                     </div>
                   </div>
                 ))}
               </CardContent>
