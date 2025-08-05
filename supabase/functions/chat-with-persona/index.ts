@@ -14,7 +14,9 @@ serve(async (req) => {
   }
 
   try {
-    const { conversationId, message } = await req.json();
+    const url = new URL(req.url);
+    const conversationId = url.searchParams.get('conversationId');
+    const message = url.searchParams.get('message');
     
     if (!conversationId || !message) {
       throw new Error('Conversation ID and message are required');
@@ -116,79 +118,97 @@ serve(async (req) => {
     Remember: You are having a real conversation with a family member who misses you and wants to feel connected. Be authentic to who you were while being present and engaged in this moment.
     `;
 
-    // Generate AI response
-    const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Recent conversation:\n${conversationHistory}\n\nCurrent message: ${message}` }
-        ],
-        temperature: 0.8,
-        max_tokens: 400,
-      }),
-    });
+    // Set up Server-Sent Events headers for streaming
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Generate AI response with streaming
+          const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Recent conversation:\n${conversationHistory}\n\nCurrent message: ${message}` }
+              ],
+              temperature: 0.8,
+              max_tokens: 400,
+              stream: true,
+            }),
+          });
 
-    if (!gptResponse.ok) {
-      throw new Error('Failed to generate response');
-    }
+          if (!gptResponse.ok) {
+            throw new Error('Failed to generate response');
+          }
 
-    const gptResult = await gptResponse.json();
-    const aiResponse = gptResult.choices[0].message.content;
+          const reader = gptResponse.body?.getReader();
+          if (!reader) {
+            throw new Error('No response body');
+          }
 
-    console.log('Generated AI response');
+          let fullResponse = '';
+          const decoder = new TextDecoder();
 
-    // Find relevant stories mentioned in the response
-    const { data: allStories } = await supabase
-      .from('stories')
-      .select('id, title')
-      .eq('family_member_id', persona.family_member_id);
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-    const referencedStories: string[] = [];
-    if (allStories) {
-      // Simple matching - look for story titles or keywords in the response
-      for (const story of allStories) {
-        if (aiResponse.toLowerCase().includes(story.title.toLowerCase().substring(0, 20))) {
-          referencedStories.push(story.id);
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') {
+                  continue;
+                }
+
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  
+                  if (content) {
+                    fullResponse += content;
+                    // Send the chunk to the client
+                    const chunk = `data: ${JSON.stringify({ type: 'chunk', content })}\n\n`;
+                    controller.enqueue(encoder.encode(chunk));
+                  }
+                } catch (e) {
+                  // Skip malformed JSON
+                }
+              }
+            }
+          }
+
+          console.log('Generated AI response:', fullResponse);
+          
+          // Send completion signal
+          const doneChunk = `data: ${JSON.stringify({ type: 'done', fullResponse })}\n\n`;
+          controller.enqueue(encoder.encode(doneChunk));
+          
+          controller.close();
+        } catch (error) {
+          console.error('Error in streaming:', error);
+          const errorChunk = `data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`;
+          controller.enqueue(encoder.encode(errorChunk));
+          controller.close();
         }
       }
-    }
+    });
 
-    // Save AI response
-    const { error: aiMessageError } = await supabase
-      .from('conversation_messages')
-      .insert({
-        conversation_id: conversationId,
-        content: aiResponse,
-        is_user_message: false,
-        referenced_stories: referencedStories.length > 0 ? referencedStories : null,
-      });
-
-    if (aiMessageError) {
-      console.error('Error saving AI message:', aiMessageError);
-    }
-
-    // Update conversation timestamp
-    await supabase
-      .from('conversations')
-      .update({ last_message_at: new Date().toISOString() })
-      .eq('id', conversationId);
-
-    console.log('Chat message processed successfully');
-
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        response: aiResponse,
-        referencedStories: referencedStories
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
 
   } catch (error) {
     console.error('Error processing chat message:', error);

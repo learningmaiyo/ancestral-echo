@@ -44,6 +44,7 @@ const Chat = () => {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState('');
   const [isGeneratingSpeech, setIsGeneratingSpeech] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -146,6 +147,7 @@ const Chat = () => {
     setSending(true);
     const messageText = newMessage.trim();
     setNewMessage('');
+    setStreamingMessage('');
 
     try {
       // Add user message optimistically
@@ -157,20 +159,64 @@ const Chat = () => {
       };
       setMessages(prev => [...prev, optimisticMessage]);
 
-      // Send to backend
-      const { data, error } = await supabase.functions.invoke('chat-with-persona', {
-        body: {
-          conversationId,
-          message: messageText
+      // Connect to streaming endpoint
+      const projectId = 'voypgvppnnmacbjboovn';
+      const eventSource = new EventSource(
+        `https://${projectId}.functions.supabase.co/chat-with-persona?conversationId=${conversationId}&message=${encodeURIComponent(messageText)}`
+      );
+
+      let fullResponse = '';
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'chunk') {
+            fullResponse += data.content;
+            setStreamingMessage(fullResponse);
+          } else if (data.type === 'done') {
+            // Complete the streaming
+            eventSource.close();
+            setStreamingMessage('');
+            
+            // Save the complete message to database
+            supabase.functions.invoke('chat-with-persona-complete', {
+              body: {
+                conversationId,
+                fullResponse: data.fullResponse || fullResponse
+              }
+            });
+            
+            // Remove optimistic message
+            setMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
+          } else if (data.type === 'error') {
+            throw new Error(data.error);
+          }
+        } catch (error) {
+          console.error('Error parsing streaming data:', error);
         }
-      });
+      };
 
-      if (error) {
-        throw error;
-      }
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        eventSource.close();
+        setStreamingMessage('');
+        setSending(false);
+        
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
+        
+        toast({
+          title: 'Error',
+          description: 'Failed to send message. Please try again.',
+          variant: 'destructive',
+        });
+      };
 
-      // Remove optimistic message and let realtime handle the actual messages
-      setMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
+      // Clean up when response is complete
+      setTimeout(() => {
+        setSending(false);
+      }, 1000);
 
     } catch (error: any) {
       console.error('Error sending message:', error);
@@ -183,7 +229,6 @@ const Chat = () => {
         description: 'Failed to send message. Please try again.',
         variant: 'destructive',
       });
-    } finally {
       setSending(false);
     }
   };
@@ -415,11 +460,25 @@ const Chat = () => {
               
               {sending && (
                 <div className="flex justify-start">
-                  <div className="bg-muted rounded-lg px-4 py-3 flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm text-muted-foreground">
-                      {conversation.personas.family_members.name} is typing...
-                    </span>
+                  <div className="bg-muted rounded-lg px-4 py-3">
+                    {streamingMessage ? (
+                      <div>
+                        <p className="text-sm">{streamingMessage}</p>
+                        <div className="flex items-center mt-2">
+                          <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                          <span className="text-xs text-muted-foreground">
+                            {conversation.personas.family_members.name} is typing...
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">
+                          {conversation.personas.family_members.name} is typing...
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
