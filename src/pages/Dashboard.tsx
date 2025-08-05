@@ -5,30 +5,35 @@ import { Users, Mic, MessageCircle, BookOpen, TreePine, Smartphone } from 'lucid
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-
 const Dashboard = () => {
-  const { user, signOut } = useAuth();
+  const {
+    user,
+    signOut
+  } = useAuth();
   const navigate = useNavigate();
-  
   const [stats, setStats] = useState({
     familyMembers: 0,
     recordings: 0,
     stories: 0,
     personas: 0
   });
-
   useEffect(() => {
     const fetchStats = async () => {
       if (!user) return;
-
       try {
-        const [familyMembersResponse, recordingsResponse, storiesResponse, personasResponse] = await Promise.all([
-          supabase.from('family_members').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          supabase.from('recordings').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          supabase.from('stories').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          supabase.from('personas').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
-        ]);
-
+        const [familyMembersResponse, recordingsResponse, storiesResponse, personasResponse] = await Promise.all([supabase.from('family_members').select('*', {
+          count: 'exact',
+          head: true
+        }).eq('user_id', user.id), supabase.from('recordings').select('*', {
+          count: 'exact',
+          head: true
+        }).eq('user_id', user.id), supabase.from('stories').select('*', {
+          count: 'exact',
+          head: true
+        }).eq('user_id', user.id), supabase.from('personas').select('*', {
+          count: 'exact',
+          head: true
+        }).eq('user_id', user.id)]);
         setStats({
           familyMembers: familyMembersResponse.count || 0,
           recordings: recordingsResponse.count || 0,
@@ -39,12 +44,9 @@ const Dashboard = () => {
         console.error('Error fetching stats:', error);
       }
     };
-
     fetchStats();
   }, [user]);
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
+  return <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
       <header className="border-b bg-background/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-primary">Digital Storyteller</h1>
@@ -79,10 +81,7 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                className="w-full"
-                onClick={() => navigate('/family-tree')}
-              >
+              <Button className="w-full" onClick={() => navigate('/family-tree')}>
                 View Family Tree
               </Button>
             </CardContent>
@@ -99,10 +98,7 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                className="w-full"
-                onClick={() => navigate('/family-members')}
-              >
+              <Button className="w-full" onClick={() => navigate('/family-members')}>
                 View Family Members
               </Button>
             </CardContent>
@@ -120,18 +116,10 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <Button 
-                  className="w-full" 
-                  variant="destructive"
-                  onClick={() => navigate('/record')}
-                >
+                <Button className="w-full" variant="destructive" onClick={() => navigate('/record')}>
                   Desktop Recording
                 </Button>
-                <Button 
-                  className="w-full gap-2" 
-                  variant="outline"
-                  onClick={() => navigate('/mobile-record')}
-                >
+                <Button className="w-full gap-2" variant="outline" onClick={() => navigate('/mobile-record')}>
                   <Smartphone className="h-4 w-4" />
                   Mobile Recording
                 </Button>
@@ -150,11 +138,7 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                className="w-full" 
-                variant="outline"
-                onClick={() => navigate('/stories')}
-              >
+              <Button className="w-full" variant="outline" onClick={() => navigate('/stories')}>
                 View Stories
               </Button>
             </CardContent>
@@ -171,11 +155,7 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                className="w-full" 
-                variant="secondary"
-                onClick={() => navigate('/conversations')}
-              >
+              <Button className="w-full" variant="secondary" onClick={() => navigate('/conversations')}>
                 Start Conversation
               </Button>
             </CardContent>
@@ -184,24 +164,8 @@ const Dashboard = () => {
 
         <div className="mt-8">
           <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mic className="h-5 w-5 text-accent" />
-                API Testing
-              </CardTitle>
-              <CardDescription>
-                Test your OpenAI and ElevenLabs API connections
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                className="w-full" 
-                variant="outline"
-                onClick={() => navigate('/api-tests')}
-              >
-                Run API Tests
-              </Button>
-            </CardContent>
+            
+            
           </Card>
         </div>
 
@@ -233,8 +197,6 @@ const Dashboard = () => {
           </Card>
         </div>
       </main>
-    </div>
-  );
+    </div>;
 };
-
 export default Dashboard;
