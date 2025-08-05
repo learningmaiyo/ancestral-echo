@@ -12,7 +12,9 @@ interface Conversation {
   title: string;
   started_at: string;
   last_message_at: string;
+  persona_id: string;
   personas: {
+    id: string;
     family_members: {
       name: string;
       photo_url: string;
@@ -42,7 +44,7 @@ const Conversations = () => {
     if (!user) return;
 
     try {
-      // Fetch conversations
+      // Fetch conversations - get one per persona (most recent)
       const { data: conversationsData, error: conversationsError } = await supabase
         .from('conversations')
         .select(`
@@ -50,7 +52,9 @@ const Conversations = () => {
           title,
           started_at,
           last_message_at,
+          persona_id,
           personas(
+            id,
             family_members(name, photo_url)
           )
         `)
@@ -60,7 +64,18 @@ const Conversations = () => {
       if (conversationsError) {
         console.error('Error fetching conversations:', conversationsError);
       } else {
-        setConversations(conversationsData || []);
+        // Filter to get only one conversation per persona (most recent)
+        const uniqueConversations = conversationsData?.reduce((acc: Conversation[], conv) => {
+          const existingIndex = acc.findIndex(c => c.personas?.id === conv.personas?.id);
+          if (existingIndex === -1) {
+            acc.push(conv);
+          } else if (new Date(conv.last_message_at) > new Date(acc[existingIndex].last_message_at)) {
+            acc[existingIndex] = conv;
+          }
+          return acc;
+        }, []) || [];
+        
+        setConversations(uniqueConversations);
       }
 
       // Fetch family members with active personas
@@ -139,27 +154,42 @@ const Conversations = () => {
     return activePersona?.training_status === 'completed';
   };
 
-  const startNewConversation = async (familyMember: FamilyMember) => {
+  const startOrContinueConversation = async (familyMember: FamilyMember) => {
     const activePersona = familyMember.personas?.find(p => p.is_active);
     if (!activePersona) return;
 
     try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .insert({
-          user_id: user?.id,
-          persona_id: activePersona.id,
-          title: `Chat with ${familyMember.name}`,
-        })
-        .select()
-        .single();
+      // Check if conversation already exists for this persona
+      const existingConversation = conversations.find(c => c.personas?.id === activePersona.id);
+      
+      if (existingConversation) {
+        // Continue existing conversation
+        navigate(`/chat/${existingConversation.id}`);
+      } else {
+        // Create new conversation
+        const { data, error } = await supabase
+          .from('conversations')
+          .insert({
+            user_id: user?.id,
+            persona_id: activePersona.id,
+            title: `Chat with ${familyMember.name}`,
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      navigate(`/chat/${data.id}`);
+        navigate(`/chat/${data.id}`);
+      }
     } catch (error) {
-      console.error('Error starting conversation:', error);
+      console.error('Error starting/continuing conversation:', error);
     }
+  };
+
+  const hasExistingConversation = (familyMember: FamilyMember) => {
+    const activePersona = familyMember.personas?.find(p => p.is_active);
+    if (!activePersona) return false;
+    return conversations.some(c => c.personas?.id === activePersona.id);
   };
 
   if (loading) {
@@ -294,9 +324,9 @@ const Conversations = () => {
             </div>
           )}
 
-          {/* Start New Conversation */}
+          {/* Start Conversation */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Start New Conversation</h3>
+            <h3 className="text-lg font-semibold">Chat with Family Members</h3>
             
             {familyMembers.length === 0 ? (
               <Card>
@@ -340,14 +370,23 @@ const Conversations = () => {
                             </div>
                           </div>
                           
-                          <div>
-                            {canChat ? (
-                              <Button
-                                onClick={() => startNewConversation(member)}
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Start Chat
-                              </Button>
+                           <div>
+                             {canChat ? (
+                               <Button
+                                 onClick={() => startOrContinueConversation(member)}
+                               >
+                                 {hasExistingConversation(member) ? (
+                                   <>
+                                     <MessageCircle className="h-4 w-4 mr-2" />
+                                     Continue Chat
+                                   </>
+                                 ) : (
+                                   <>
+                                     <Plus className="h-4 w-4 mr-2" />
+                                     Start Chat
+                                   </>
+                                 )}
+                               </Button>
                             ) : status === 'no-persona' ? (
                               <Button
                                 variant="outline"
