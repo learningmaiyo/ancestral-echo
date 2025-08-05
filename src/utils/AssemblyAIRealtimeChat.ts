@@ -36,11 +36,16 @@ export class AssemblyAIRealtimeChat {
       this.source = this.audioContext.createMediaStreamSource(this.stream);
       this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
 
-      // Get AssemblyAI API key from environment
-      const ASSEMBLYAI_API_KEY = 'b0a7b8b4e3e44f6baa4b8b4e3e44f6ba'; // Use your actual API key
+      // Get AssemblyAI API key from our edge function (which accesses Supabase secrets)
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data, error } = await supabase.functions.invoke('get-assemblyai-key');
+
+      if (error || !data.apiKey) {
+        throw new Error(error?.message || "Failed to get AssemblyAI API key");
+      }
 
       // Connect to AssemblyAI Universal-Streaming API with direct API key authentication
-      const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&api_key=${ASSEMBLYAI_API_KEY}`;
+      const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&api_key=${data.apiKey}`;
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
