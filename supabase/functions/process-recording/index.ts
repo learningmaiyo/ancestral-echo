@@ -57,13 +57,13 @@ serve(async (req) => {
       .update({ processing_status: 'processing' })
       .eq('id', recordingId);
 
-    // Step 1: Transcribe audio using OpenAI Whisper
+    // Step 1: Transcribe audio using AssemblyAI
     console.log('Starting transcription...');
     
-    // Validate OpenAI API key
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
+    // Validate AssemblyAI API key
+    const assemblyAIApiKey = Deno.env.get('ASSEMBLYAI_API_KEY');
+    if (!assemblyAIApiKey) {
+      throw new Error('AssemblyAI API key not configured');
     }
     
     // Download and validate audio file
@@ -93,38 +93,47 @@ serve(async (req) => {
         throw new Error('Audio file is empty');
       }
       
-      if (audioSize > 25 * 1024 * 1024) { // 25MB limit for OpenAI Whisper
-        throw new Error(`Audio file too large: ${audioSize} bytes (max 25MB)`);
-      }
-
-      // Prepare transcription request
-      const formData = new FormData();
-      const fileName = recording.audio_url.split('/').pop() || 'audio.mp3';
-      const fileExtension = fileName.split('.').pop()?.toLowerCase();
+      // No size limit check needed for AssemblyAI (it handles large files well)
       
-      // Validate file format
-      const supportedFormats = ['mp3', 'mp4', 'm4a', 'wav', 'webm'];
-      if (!fileExtension || !supportedFormats.includes(fileExtension)) {
-        console.warn('Unsupported file format:', fileExtension);
-      }
+      console.log('Uploading audio to AssemblyAI...');
       
-      formData.append('file', new File([audioData], fileName, { type: 'audio/mpeg' }));
-      formData.append('model', 'whisper-1');
-
-      console.log('Sending transcription request to OpenAI...');
-      
-      transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      // First, upload the audio to AssemblyAI
+      const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
+          'authorization': assemblyAIApiKey,
         },
-        body: formData,
+        body: audioData,
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('AssemblyAI upload error:', uploadResponse.status, errorText);
+        throw new Error(`Failed to upload audio to AssemblyAI (${uploadResponse.status}): ${errorText}`);
+      }
+
+      const uploadResult = await uploadResponse.json();
+      console.log('Audio uploaded to AssemblyAI:', uploadResult.upload_url);
+
+      // Submit transcription request
+      console.log('Sending transcription request to AssemblyAI...');
+      
+      transcriptionResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+        method: 'POST',
+        headers: {
+          'authorization': assemblyAIApiKey,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          audio_url: uploadResult.upload_url,
+          speaker_labels: true,
+        }),
       });
 
       if (!transcriptionResponse.ok) {
         const errorText = await transcriptionResponse.text();
-        console.error('OpenAI transcription error:', transcriptionResponse.status, errorText);
-        throw new Error(`Failed to transcribe audio (${transcriptionResponse.status}): ${errorText}`);
+        console.error('AssemblyAI transcription request error:', transcriptionResponse.status, errorText);
+        throw new Error(`Failed to request transcription from AssemblyAI (${transcriptionResponse.status}): ${errorText}`);
       }
       
     } catch (error) {
@@ -132,10 +141,35 @@ serve(async (req) => {
       throw new Error(`Transcription failed: ${error.message}`);
     }
 
-    const transcriptionResult = await transcriptionResponse.json();
-    const transcription = transcriptionResult.text;
+    let transcriptionResult = await transcriptionResponse.json();
+    console.log('Transcription request submitted, ID:', transcriptionResult.id);
 
-    console.log('Transcription completed');
+    // Poll for completion
+    while (transcriptionResult.status !== 'completed' && transcriptionResult.status !== 'error') {
+      console.log('Polling transcription status:', transcriptionResult.status);
+      
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+      
+      const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptionResult.id}`, {
+        headers: {
+          'authorization': assemblyAIApiKey,
+        },
+      });
+
+      if (pollResponse.ok) {
+        transcriptionResult = await pollResponse.json();
+      } else {
+        throw new Error('Failed to poll transcription status');
+      }
+    }
+
+    if (transcriptionResult.status === 'error') {
+      console.error('AssemblyAI transcription error:', transcriptionResult.error);
+      throw new Error(`Transcription failed: ${transcriptionResult.error}`);
+    }
+
+    const transcription = transcriptionResult.text;
+    console.log('Transcription completed successfully');
 
     // Update recording with transcription
     await supabase
@@ -179,6 +213,26 @@ serve(async (req) => {
 
     If no clear stories can be extracted, return an empty array [].
     `;
+
+    // Get OpenAI API key for story processing
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiApiKey) {
+      console.warn('OpenAI API key not configured - skipping story processing');
+      // Update recording status to completed without story processing
+      await supabase
+        .from('recordings')
+        .update({ processing_status: 'completed' })
+        .eq('id', recordingId);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Recording transcribed successfully (story processing skipped)',
+          transcription: transcription 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
