@@ -108,6 +108,23 @@ const APITests = () => {
     setAudioDebugResult(null);
     
     try {
+      // First test if the OpenAI function works to isolate the issue
+      console.log('Testing OpenAI function first...');
+      
+      const openAITestResponse = await supabase.functions.invoke('test-openai');
+      console.log('OpenAI test response:', openAITestResponse);
+      
+      if (openAITestResponse.error) {
+        throw new Error(`Edge Functions not accessible: ${openAITestResponse.error.message}`);
+      }
+      
+      if (!openAITestResponse.data) {
+        throw new Error('Edge Functions are not responding properly');
+      }
+      
+      // Now test the debug function with a simple request
+      console.log('Testing debug-audio function...');
+      
       // Use one of the failed recording IDs
       const recordingId = "6bd7ba7e-824a-42f2-b370-1038d00444e4";
       
@@ -121,6 +138,11 @@ const APITests = () => {
       
       // Handle both error and data cases
       if (response.error) {
+        // Check if it's a deployment issue
+        if (response.error.message?.includes('Failed to fetch') || 
+            response.error.message?.includes('Failed to send a request')) {
+          throw new Error('Debug function is not deployed or accessible. The function may need to be redeployed.');
+        }
         throw new Error(response.error.message || 'Function invocation failed');
       }
       
