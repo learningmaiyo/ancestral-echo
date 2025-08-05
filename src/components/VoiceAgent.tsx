@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { useConversation } from '@11labs/react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mic, MicOff, Phone, PhoneOff } from 'lucide-react';
+import { Mic, MicOff, Send, Volume2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -18,50 +18,50 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
   onMessage
 }) => {
   const { toast } = useToast();
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [agentConfig, setAgentConfig] = useState<any>(null);
   const [transcript, setTranscript] = useState<string>('');
-  const [isMuted, setIsMuted] = useState(false);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Initialize ElevenLabs conversation hook
-  const conversation = useConversation({
-    onConnect: () => {
-      console.log('Connected to voice agent');
-      setIsConnecting(false);
-      toast({
-        title: "Voice chat connected",
-        description: `You can now talk with ${familyMemberName}`,
+  // Generate speech using TTS
+  const generateSpeech = async (text: string) => {
+    try {
+      setIsPlaying(true);
+      const { data, error } = await supabase.functions.invoke('generate-speech', {
+        body: { 
+          text, 
+          personaId: agentConfig?.conversationId 
+        }
       });
-    },
-    onDisconnect: () => {
-      console.log('Disconnected from voice agent');
-      setIsConnecting(false);
-    },
-    onMessage: (message) => {
-      console.log('Received message:', message);
-      // Update transcript with user input and AI responses
-      if (message.source === 'user') {
-        setTranscript(prev => prev + `You: ${message.message}\n`);
-        // Save user message to database
-        saveMessage(message.message, true);
-      } else if (message.source === 'ai') {
-        setTranscript(prev => prev + `${familyMemberName}: ${message.message}\n`);
-        // Save AI response to database
-        saveMessage(message.message, false);
-        // Notify parent component
-        onMessage?.(message);
+
+      if (error) throw error;
+
+      // Play the audio
+      if (data?.audioContent) {
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(data.audioContent), c => c.charCodeAt(0))],
+          { type: 'audio/mpeg' }
+        );
+        const audioUrl = URL.createObjectURL(audioBlob);
+        
+        if (audioRef.current) {
+          audioRef.current.src = audioUrl;
+          await audioRef.current.play();
+        }
       }
-    },
-    onError: (error) => {
-      console.error('Voice agent error:', error);
+    } catch (error) {
+      console.error('Error generating speech:', error);
       toast({
-        title: "Voice chat error",
-        description: typeof error === 'string' ? error : 'An error occurred',
+        title: "Speech error",
+        description: "Failed to generate speech",
         variant: "destructive",
       });
-      setIsConnecting(false);
+    } finally {
+      setIsPlaying(false);
     }
-  });
+  };
 
   // Save message to database
   const saveMessage = async (content: string, isUserMessage: boolean) => {
@@ -107,153 +107,136 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
     }
   };
 
-  // Start voice conversation
-  const startVoiceChat = async () => {
-    setIsConnecting(true);
-    setTranscript('');
+  // Send message and get TTS response
+  const sendMessage = async () => {
+    if (!currentMessage.trim() || isLoading) return;
+
+    const userMessage = currentMessage.trim();
+    setCurrentMessage('');
+    setIsLoading(true);
 
     try {
-      // Request microphone permission
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Add user message to transcript
+      setTranscript(prev => prev + `You: ${userMessage}\n`);
+      await saveMessage(userMessage, true);
 
-      // Get agent configuration
-      const config = await getAgentConfig();
-      if (!config) {
-        setIsConnecting(false);
-        return;
+      // Get agent config if not already loaded
+      if (!agentConfig) {
+        const config = await getAgentConfig();
+        if (!config) return;
       }
 
-      // For demo purposes, we'll use a placeholder since ElevenLabs agents need to be configured in their dashboard
-      // In production, you'd use the actual agent ID and signed URL
-      toast({
-        title: "Voice Agent Ready",
-        description: `Voice agent configured for ${familyMemberName}. In production, this would connect to ElevenLabs Conversational AI.`,
-      });
+      // Simulate AI response (in real implementation, this would call a chat API)
+      const aiResponse = `Thank you for sharing that with me. As ${familyMemberName}, I appreciate you taking the time to talk with me.`;
       
-      // Simulate connection for demo
-      setTimeout(() => {
-        setIsConnecting(false);
-        setTranscript(`Connected to ${familyMemberName}. Start speaking...\n`);
-      }, 1000);
-
-      // TODO: Replace with actual ElevenLabs agent connection
-      // await conversation.startSession({ 
-      //   agentId: config.agentId,
-      //   overrides: {
-      //     agent: {
-      //       prompt: { prompt: config.systemPrompt },
-      //       firstMessage: `Hello! It's so wonderful to talk with you again.`
-      //     },
-      //     tts: { voiceId: config.voiceId }
-      //   }
-      // });
+      // Add AI response to transcript
+      setTranscript(prev => prev + `${familyMemberName}: ${aiResponse}\n`);
+      await saveMessage(aiResponse, false);
+      
+      // Generate and play speech
+      await generateSpeech(aiResponse);
+      
+      onMessage?.({ message: aiResponse, source: 'ai' });
 
     } catch (error) {
-      console.error('Error starting voice chat:', error);
+      console.error('Error sending message:', error);
       toast({
-        title: "Microphone access required",
-        description: "Please allow microphone access to use voice chat",
+        title: "Message error",
+        description: "Failed to send message",
         variant: "destructive",
       });
-      setIsConnecting(false);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // End voice conversation
-  const endVoiceChat = async () => {
+  // Initialize chat
+  const initializeChat = async () => {
+    setIsLoading(true);
     try {
-      await conversation.endSession();
-      setTranscript('');
-      setIsMuted(false);
+      const config = await getAgentConfig();
+      if (config) {
+        setTranscript(`Voice chat with ${familyMemberName} is ready. Type a message to start...\n`);
+        toast({
+          title: "Chat ready",
+          description: `You can now chat with ${familyMemberName}`,
+        });
+      }
     } catch (error) {
-      console.error('Error ending voice chat:', error);
+      console.error('Error initializing chat:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Toggle mute
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-    // TODO: Implement actual mute functionality with ElevenLabs
+  // Handle enter key press
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
 
-  // Cleanup on unmount
+  // Initialize on mount
   useEffect(() => {
-    return () => {
-      conversation.endSession().catch(console.error);
-    };
+    initializeChat();
   }, []);
 
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Mic className="h-5 w-5" />
+          <Volume2 className="h-5 w-5" />
           Voice Chat with {familyMemberName}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Connection Status */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {isConnecting && (
-              <div className="flex items-center gap-2 text-yellow-600">
-                <div className="w-2 h-2 bg-yellow-600 rounded-full animate-pulse" />
-                Connecting...
-              </div>
-            )}
-            {conversation.status === 'connected' && (
-              <div className="flex items-center gap-2 text-green-600">
-                <div className="w-2 h-2 bg-green-600 rounded-full" />
-                Connected
-              </div>
-            )}
-            {conversation.isSpeaking && (
-              <div className="flex items-center gap-2 text-blue-600">
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
-                {familyMemberName} is speaking...
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Control Buttons */}
-        <div className="flex gap-2">
-          {conversation.status !== 'connected' ? (
-            <Button
-              onClick={startVoiceChat}
-              disabled={isConnecting}
-              className="flex-1"
-            >
-              <Phone className="h-4 w-4 mr-2" />
-              {isConnecting ? 'Connecting...' : 'Start Voice Chat'}
-            </Button>
-          ) : (
-            <>
-              <Button
-                onClick={endVoiceChat}
-                variant="destructive"
-                className="flex-1"
-              >
-                <PhoneOff className="h-4 w-4 mr-2" />
-                End Chat
-              </Button>
-              <Button
-                onClick={toggleMute}
-                variant={isMuted ? "destructive" : "outline"}
-                size="icon"
-              >
-                {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </Button>
-            </>
+        {/* Status */}
+        <div className="flex items-center gap-2">
+          {isLoading && (
+            <div className="flex items-center gap-2 text-blue-600">
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
+              Processing...
+            </div>
+          )}
+          {isPlaying && (
+            <div className="flex items-center gap-2 text-green-600">
+              <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />
+              {familyMemberName} is speaking...
+            </div>
+          )}
+          {!isLoading && !isPlaying && agentConfig && (
+            <div className="flex items-center gap-2 text-green-600">
+              <div className="w-2 h-2 bg-green-600 rounded-full" />
+              Ready
+            </div>
           )}
         </div>
 
-        {/* Live Transcript */}
+        {/* Message Input */}
+        <div className="flex gap-2">
+          <Input
+            placeholder={`Type a message to ${familyMemberName}...`}
+            value={currentMessage}
+            onChange={(e) => setCurrentMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isLoading}
+          />
+          <Button
+            onClick={sendMessage}
+            disabled={!currentMessage.trim() || isLoading}
+            size="icon"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Conversation Transcript */}
         {transcript && (
           <div className="space-y-2">
-            <h4 className="font-medium">Live Conversation</h4>
+            <h4 className="font-medium">Conversation</h4>
             <div className="bg-muted p-3 rounded-lg min-h-[200px] max-h-[400px] overflow-y-auto">
-              <pre className="whitespace-pre-wrap text-sm font-mono">
+              <pre className="whitespace-pre-wrap text-sm">
                 {transcript || 'Conversation will appear here...'}
               </pre>
             </div>
@@ -261,19 +244,21 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
         )}
 
         {/* Instructions */}
-        {conversation.status !== 'connected' && !isConnecting && (
+        {!agentConfig && !isLoading && (
           <div className="text-sm text-muted-foreground">
-            <p>Click "Start Voice Chat" to begin a voice conversation with {familyMemberName}.</p>
-            <p className="mt-1">Make sure your microphone is working and you're in a quiet environment.</p>
+            <p>Setting up voice chat with {familyMemberName}...</p>
           </div>
         )}
 
-        {conversation.status === 'connected' && (
+        {agentConfig && !transcript && (
           <div className="text-sm text-muted-foreground">
-            <p>You're now connected! Start speaking naturally to {familyMemberName}.</p>
-            <p className="mt-1">The conversation will be saved to your chat history.</p>
+            <p>Type a message above to start chatting with {familyMemberName}.</p>
+            <p className="mt-1">Messages will be spoken aloud using their voice.</p>
           </div>
         )}
+
+        {/* Hidden audio element for playing TTS */}
+        <audio ref={audioRef} onEnded={() => setIsPlaying(false)} />
       </CardContent>
     </Card>
   );
