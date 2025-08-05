@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.test-elevenlabs]
 verify_jwt = false
+
+[functions.debug-audio]
+verify_jwt = false

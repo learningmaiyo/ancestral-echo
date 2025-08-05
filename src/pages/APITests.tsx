@@ -11,14 +11,17 @@ interface TestResult {
   message: string;
   data?: any;
   error?: string;
+  details?: any;
 }
 
 const APITests = () => {
   const { toast } = useToast();
   const [openAITesting, setOpenAITesting] = useState(false);
   const [elevenLabsTesting, setElevenLabsTesting] = useState(false);
+  const [audioDebugTesting, setAudioDebugTesting] = useState(false);
   const [openAIResult, setOpenAIResult] = useState<TestResult | null>(null);
   const [elevenLabsResult, setElevenLabsResult] = useState<TestResult | null>(null);
+  const [audioDebugResult, setAudioDebugResult] = useState<TestResult | null>(null);
 
   const testOpenAI = async () => {
     setOpenAITesting(true);
@@ -100,6 +103,51 @@ const APITests = () => {
     }
   };
 
+  const testAudioDebug = async () => {
+    setAudioDebugTesting(true);
+    setAudioDebugResult(null);
+    
+    try {
+      // Use one of the failed recording IDs
+      const recordingId = "6bd7ba7e-824a-42f2-b370-1038d00444e4";
+      
+      const response = await supabase.functions.invoke('debug-audio', {
+        body: { recordingId }
+      });
+      const result = response.data;
+      
+      setAudioDebugResult(result);
+      
+      if (result.success) {
+        toast({
+          title: "Audio Debug Successful",
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: "Audio Debug Failed",
+          description: result.error,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      const errorResult = {
+        success: false,
+        message: "Debug test failed",
+        error: error.message
+      };
+      setAudioDebugResult(errorResult);
+      
+      toast({
+        title: "Audio Debug Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setAudioDebugTesting(false);
+    }
+  };
+
   const testBothAPIs = async () => {
     await Promise.all([testOpenAI(), testElevenLabs()]);
   };
@@ -130,7 +178,66 @@ const APITests = () => {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          {/* Audio Debug Test Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Volume2 className="h-5 w-5 text-orange-500" />
+                Audio Debug Test
+                {getStatusIcon(audioDebugResult, audioDebugTesting)}
+              </CardTitle>
+              <CardDescription>
+                Debug failed audio recordings to identify the root cause
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Status:</span>
+                {getStatusBadge(audioDebugResult, audioDebugTesting)}
+              </div>
+              
+              {audioDebugResult && (
+                <div className="space-y-2">
+                  <div className="text-sm">
+                    <span className="font-medium">Message:</span> {audioDebugResult.message}
+                  </div>
+                  {audioDebugResult.success && audioDebugResult.details && (
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <div>Recording ID: {audioDebugResult.details.recording_id}</div>
+                      <div>Audio size: {audioDebugResult.details.audio_size} bytes</div>
+                      <div>File: {audioDebugResult.details.file_name}</div>
+                      {audioDebugResult.details.transcription_preview && (
+                        <div>Preview: {audioDebugResult.details.transcription_preview}</div>
+                      )}
+                    </div>
+                  )}
+                  {audioDebugResult.error && (
+                    <div className="text-sm text-red-500">
+                      Error: {audioDebugResult.error}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <Button 
+                onClick={testAudioDebug} 
+                disabled={audioDebugTesting}
+                className="w-full"
+                variant="outline"
+              >
+                {audioDebugTesting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Debugging...
+                  </>
+                ) : (
+                  'Debug Failed Recording'
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* OpenAI Test Card */}
           <Card>
             <CardHeader>
@@ -248,32 +355,55 @@ const APITests = () => {
         {/* Test All Button */}
         <Card>
           <CardContent className="pt-6">
-            <Button 
-              onClick={testBothAPIs} 
-              disabled={openAITesting || elevenLabsTesting}
-              size="lg"
-              className="w-full"
-            >
-              {(openAITesting || elevenLabsTesting) ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Running Tests...
-                </>
-              ) : (
-                'Test Both APIs'
-              )}
-            </Button>
+            <div className="grid md:grid-cols-2 gap-4">
+              <Button 
+                onClick={testBothAPIs} 
+                disabled={openAITesting || elevenLabsTesting}
+                size="lg"
+                className="w-full"
+              >
+                {(openAITesting || elevenLabsTesting) ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Running Tests...
+                  </>
+                ) : (
+                  'Test Both APIs'
+                )}
+              </Button>
+              
+              <Button 
+                onClick={testAudioDebug} 
+                disabled={audioDebugTesting}
+                size="lg"
+                variant="outline"
+                className="w-full"
+              >
+                {audioDebugTesting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Debugging Audio...
+                  </>
+                ) : (
+                  'Debug Audio Processing'
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
         {/* Results Summary */}
-        {(openAIResult || elevenLabsResult) && (
+        {(openAIResult || elevenLabsResult || audioDebugResult) && (
           <Card className="mt-6">
             <CardHeader>
               <CardTitle>Test Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <span className="font-medium">Audio Debug</span>
+                  {getStatusBadge(audioDebugResult, false)}
+                </div>
                 <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                   <span className="font-medium">OpenAI API</span>
                   {getStatusBadge(openAIResult, false)}
@@ -284,7 +414,7 @@ const APITests = () => {
                 </div>
               </div>
               
-              {openAIResult?.success && elevenLabsResult?.success && (
+              {openAIResult?.success && elevenLabsResult?.success && audioDebugResult?.success && (
                 <div className="mt-4 p-4 rounded-lg bg-green-50 border border-green-200">
                   <div className="flex items-center gap-2 text-green-800">
                     <CheckCircle className="h-5 w-5" />
