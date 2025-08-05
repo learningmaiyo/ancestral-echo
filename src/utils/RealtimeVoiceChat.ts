@@ -125,6 +125,9 @@ export class RealtimeVoiceChat {
         console.log("Data channel opened");
         this.isConnected = true;
         this.onConnectionChange(true);
+        
+        // Send session update to configure audio output after connection
+        this.configureSession();
       });
 
       this.dc.addEventListener("close", () => {
@@ -170,22 +173,73 @@ export class RealtimeVoiceChat {
     }
   }
 
+  private configureSession() {
+    if (!this.dc || this.dc.readyState !== 'open') {
+      console.error('Cannot configure session - data channel not ready');
+      return;
+    }
+
+    console.log('Configuring session for audio output...');
+    
+    // Send session update to ensure audio output is enabled
+    const sessionUpdate = {
+      type: 'session.update',
+      session: {
+        modalities: ['text', 'audio'],
+        instructions: `You are having a voice conversation. Respond with audio - speak naturally and conversationally.`,
+        voice: 'sage',
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: {
+          model: 'whisper-1'
+        },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 1000
+        },
+        tool_choice: 'auto',
+        temperature: 0.8,
+        max_response_output_tokens: 4096
+      }
+    };
+
+    this.dc.send(JSON.stringify(sessionUpdate));
+    console.log('Session configuration sent');
+  }
+
   private handleRealtimeEvent(event: any) {
     this.onMessage(event);
 
     // Handle specific events for UI updates
     switch (event.type) {
+      case 'session.created':
+        console.log('Session created, will configure after data channel opens');
+        break;
+      case 'session.updated':
+        console.log('Session updated successfully');
+        break;
       case 'response.audio.delta':
+        console.log('Received audio delta - AI is speaking');
         this.onSpeakingChange(true);
         break;
       case 'response.audio.done':
+        console.log('Audio response completed');
         this.onSpeakingChange(false);
         break;
       case 'response.done':
+        console.log('Response completed');
         this.onSpeakingChange(false);
         break;
       case 'error':
         console.error('Realtime API error:', event.error);
+        break;
+      case 'input_audio_buffer.speech_started':
+        console.log('User started speaking');
+        break;
+      case 'input_audio_buffer.speech_stopped':
+        console.log('User stopped speaking');
         break;
     }
   }
