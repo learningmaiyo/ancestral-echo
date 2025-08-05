@@ -86,7 +86,7 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
     }
   };
 
-  // Get voice agent configuration
+  // Get voice agent configuration and create dynamic agent
   const getAgentConfig = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('get-voice-agent-url', {
@@ -102,8 +102,36 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
     } catch (error) {
       console.error('Error getting agent config:', error);
       toast({
-        title: "Configuration error",
+        title: "Configuration error", 
         description: "Failed to get voice agent configuration",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  // Create or get ElevenLabs agent for the family member
+  const getOrCreateAgent = async (config: any) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('get-or-create-elevenlabs-agent', {
+        body: { 
+          conversationId,
+          voiceModelId: config.voiceModelId,
+          systemPrompt: config.systemPrompt,
+          familyMemberName
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return data.agentId;
+    } catch (error) {
+      console.error('Error creating agent:', error);
+      toast({
+        title: "Agent creation error",
+        description: "Failed to create voice agent",
         variant: "destructive",
       });
       return null;
@@ -126,33 +154,49 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({
         return;
       }
 
-      // For now, we'll simulate the connection since we need ElevenLabs agent IDs
-      // In production, you would use the actual agent ID and signed URL
-      console.log('Starting voice chat with config:', config);
-      
-      // Simulate connection for demo
-      setTimeout(() => {
-        setIsConnecting(false);
-        setConversationStarted(true);
-        setTranscript(`Connected to ${familyMemberName}. Start speaking...\n`);
+      // Check if we have a voice model for this family member
+      if (!config.voiceModelId) {
         toast({
-          title: "Voice chat ready",
-          description: `You can now talk with ${familyMemberName}. This is a demo mode - full ElevenLabs integration requires agent setup.`,
+          title: "Voice not ready",
+          description: `Please clone ${familyMemberName}'s voice first to enable voice chat.`,
+          variant: "destructive",
         });
-      }, 1000);
+        setIsConnecting(false);
+        return;
+      }
 
-      // TODO: Replace with actual ElevenLabs agent connection
-      // const agentId = 'your-elevenlabs-agent-id'; // Get this from ElevenLabs dashboard
-      // await conversation.startSession({ 
-      //   agentId,
-      //   overrides: {
-      //     agent: {
-      //       prompt: { prompt: config.systemPrompt },
-      //       firstMessage: `Hello! It's so wonderful to talk with you again.`
-      //     },
-      //     tts: { voiceId: config.voiceId }
-      //   }
-      // });
+      // Create or get ElevenLabs agent dynamically
+      const agentId = await getOrCreateAgent(config);
+      if (!agentId) {
+        setIsConnecting(false);
+        return;
+      }
+
+      // Get signed URL for the agent
+      const { data: signedUrlData, error: urlError } = await supabase.functions.invoke('get-elevenlabs-signed-url', {
+        body: { agentId }
+      });
+
+      if (urlError || !signedUrlData?.signedUrl) {
+        toast({
+          title: "Connection error",
+          description: "Failed to get voice chat connection",
+          variant: "destructive",
+        });
+        setIsConnecting(false);
+        return;
+      }
+
+      // Start actual ElevenLabs conversation
+      await conversation.startSession({ 
+        agentId,
+        overrides: {
+          agent: {
+            prompt: { prompt: config.systemPrompt },
+            firstMessage: `Hello! It's so wonderful to talk with you again.`
+          }
+        }
+      });
 
     } catch (error) {
       console.error('Error starting voice chat:', error);
