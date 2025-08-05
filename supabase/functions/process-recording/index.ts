@@ -60,36 +60,76 @@ serve(async (req) => {
     // Step 1: Transcribe audio using OpenAI Whisper
     console.log('Starting transcription...');
     
-    // Download audio file
-    // Extract the file path from the full URL
-    const urlPath = new URL(recording.audio_url).pathname;
-    const filePath = urlPath.split('/storage/v1/object/public/recordings/')[1];
-    
-    const { data: audioData } = await supabase.storage
-      .from('recordings')
-      .download(filePath);
-
-    if (!audioData) {
-      throw new Error('Failed to download audio file');
+    // Validate OpenAI API key
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API key not configured');
     }
+    
+    // Download and validate audio file
+    let transcriptionResponse;
+    
+    try {
+      // Extract the file path from the full URL
+      const urlPath = new URL(recording.audio_url).pathname;
+      const filePath = urlPath.split('/storage/v1/object/public/recordings/')[1];
+      
+      console.log('Downloading audio file:', filePath);
+      
+      const { data: audioData, error: downloadError } = await supabase.storage
+        .from('recordings')
+        .download(filePath);
 
-    // Transcribe with OpenAI
-    const formData = new FormData();
-    // Extract filename from URL to determine the correct file extension
-    const fileName = recording.audio_url.split('/').pop() || 'audio.mp3';
-    formData.append('file', new File([audioData], fileName, { type: 'audio/mpeg' }));
-    formData.append('model', 'whisper-1');
+      if (downloadError || !audioData) {
+        console.error('Download error:', downloadError);
+        throw new Error(`Failed to download audio file: ${downloadError?.message || 'No data received'}`);
+      }
 
-    const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-      },
-      body: formData,
-    });
+      // Validate audio file
+      const audioSize = audioData.size;
+      console.log('Audio file size:', audioSize, 'bytes');
+      
+      if (audioSize === 0) {
+        throw new Error('Audio file is empty');
+      }
+      
+      if (audioSize > 25 * 1024 * 1024) { // 25MB limit for OpenAI Whisper
+        throw new Error(`Audio file too large: ${audioSize} bytes (max 25MB)`);
+      }
 
-    if (!transcriptionResponse.ok) {
-      throw new Error('Failed to transcribe audio');
+      // Prepare transcription request
+      const formData = new FormData();
+      const fileName = recording.audio_url.split('/').pop() || 'audio.mp3';
+      const fileExtension = fileName.split('.').pop()?.toLowerCase();
+      
+      // Validate file format
+      const supportedFormats = ['mp3', 'mp4', 'm4a', 'wav', 'webm'];
+      if (!fileExtension || !supportedFormats.includes(fileExtension)) {
+        console.warn('Unsupported file format:', fileExtension);
+      }
+      
+      formData.append('file', new File([audioData], fileName, { type: 'audio/mpeg' }));
+      formData.append('model', 'whisper-1');
+
+      console.log('Sending transcription request to OpenAI...');
+      
+      transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+        body: formData,
+      });
+
+      if (!transcriptionResponse.ok) {
+        const errorText = await transcriptionResponse.text();
+        console.error('OpenAI transcription error:', transcriptionResponse.status, errorText);
+        throw new Error(`Failed to transcribe audio (${transcriptionResponse.status}): ${errorText}`);
+      }
+      
+    } catch (error) {
+      console.error('Audio transcription failed:', error);
+      throw new Error(`Transcription failed: ${error.message}`);
     }
 
     const transcriptionResult = await transcriptionResponse.json();
@@ -143,7 +183,7 @@ serve(async (req) => {
     const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Authorization': `Bearer ${openaiApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -158,7 +198,9 @@ serve(async (req) => {
     });
 
     if (!gptResponse.ok) {
-      throw new Error('Failed to process stories with GPT');
+      const errorText = await gptResponse.text();
+      console.error('GPT story processing error:', gptResponse.status, errorText);
+      throw new Error(`Failed to process stories with GPT (${gptResponse.status}): ${errorText}`);
     }
 
     const gptResult = await gptResponse.json();
@@ -240,7 +282,7 @@ serve(async (req) => {
       const personalityResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+          'Authorization': `Bearer ${openaiApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -264,8 +306,12 @@ serve(async (req) => {
         try {
           personalityData = JSON.parse(personalityResult.choices[0].message.content);
         } catch (e) {
-          console.error('Failed to parse personality response as JSON');
+          console.error('Failed to parse personality response as JSON:', e);
+          console.error('Raw response:', personalityResult.choices[0].message.content);
         }
+      } else {
+        const errorText = await personalityResponse.text();
+        console.error('Personality generation error:', personalityResponse.status, errorText);
       }
 
       // Check if persona exists
