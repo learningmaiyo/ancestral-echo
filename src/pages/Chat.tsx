@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Send, User, Loader2, Heart, MessageCircle, Mic, Volume2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import VoiceInterface from '@/components/VoiceInterface';
+import AssemblyAIVoiceInterface from '@/components/AssemblyAIVoiceInterface';
 
 interface Message {
   id: string;
@@ -460,7 +460,7 @@ const Chat = () => {
           {/* Voice Chat Tab */}
           <TabsContent value="voice" className="flex-1 flex flex-col items-center justify-center">
             <div className="max-w-md w-full">
-              <VoiceInterface
+              <AssemblyAIVoiceInterface
                 conversationId={conversationId!}
                 familyMemberName={conversation.personas.family_members.name}
                 onMessage={handleVoiceMessage}
