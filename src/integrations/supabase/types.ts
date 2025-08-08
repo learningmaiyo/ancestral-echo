@@ -375,7 +375,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      reset_stuck_voice_cloning: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       processing_status: "pending" | "processing" | "completed" | "failed"
