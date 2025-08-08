@@ -26,6 +26,8 @@ serve(async (req) => {
     }
 
     console.log('Starting voice cloning for persona:', personaId);
+    console.log('Audio samples count:', audioSamples.length);
+    console.log('Voice name:', voiceName);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -94,12 +96,15 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('ElevenLabs API error:', errorText);
+      console.error('ElevenLabs API error:', response.status, errorText);
       
-      // Update status to failed
+      // Update status to failed with detailed error
       await supabase
         .from('personas')
-        .update({ voice_model_status: 'failed' })
+        .update({ 
+          voice_model_status: 'failed',
+          voice_samples_count: 0
+        })
         .eq('id', personaId);
         
       throw new Error(`Voice cloning failed: ${response.status} - ${errorText}`);
@@ -149,6 +154,27 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Error in voice cloning:", error);
+    
+    // Ensure persona status is reset on any error
+    try {
+      const { personaId } = await req.json();
+      if (personaId) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        
+        await supabase
+          .from('personas')
+          .update({ 
+            voice_model_status: 'failed',
+            voice_samples_count: 0
+          })
+          .eq('id', personaId);
+      }
+    } catch (cleanupError) {
+      console.error("Failed to cleanup persona status:", cleanupError);
+    }
+    
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
